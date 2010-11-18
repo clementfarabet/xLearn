@@ -1,0 +1,43 @@
+Cairo Package Reference Manual
+
+Cairo is a vector graphics library from [[http://www.cairographics.org][http://www.cairographics.org]]. It produces high quality output on windows, image buffers, PostScript, PDF, and SVG file output.
+
+The [[../lcairo/index.hlp][=lcairo=]] package is both a Lua wrapper for functions from the Cairo library, and a minimal crossplatform window manager.
+
+The [[../gfx/index.hlp][=gfx=]] plotting package uses lcairo for it's drawing, windows creation, window management and message handling. The [[../gfx/index.hlp][=gfx=]] package is written entirely in Lua. 
+
+If you need to create custom graphics and/or interactive applications, you can use lcairo directly from Lua. A simple example is shown below..
+
+<verbatim>
+	require "lcairo"
+	w=lcairo.window(200,200)-- create a window
+	cr=lcairo.cairo(w)	-- create the drawing object on the window
+	cr:set_line_width(2.0)	-- set line width of the pen
+	cr:move_to(80, 100)	-- move the pen
+	cr:line_to(100,120)	-- start a path
+	cr:line_to(160,20)	-- continue a path
+	cr:stroke()		-- mark the path
+	w:refresh()		-- refresh the window
+</verbatim>
+
+A large subset of the Cairo drawing functions are supported, and the list will grow with time. 
+
+---+ More Cairo documentation online.
+
+The Cairo website [[http://www.cairographics.org][http://www.cairographics.org]] has some excellent [[http://www.cairographics.org/documentation][documentation]] including an [[http://www.cairographics.org/manual/][API reference]]. There is also a great set of samples on [[http://www.cairographics.org/samples][this page]]. 
+
+While the [[../lcairo/index.hlp][=lcairo=]] API differs slightly from the C style interface referenced in this documentation the differences are largely syntactic and consistent.
+
+<verbatim>
+/* in C style documentation */
+cairo_set_line_width (cr, 10.0);
+cairo_arc (cr, xc, yc, radius, angle1, angle2);
+cairo_stroke (cr);
+
+/* lcairo from LUA */
+cr:set_line_width (10.0);
+cr:arc ( xc, yc, radius, angle1, angle2);
+cr:stroke ();
+</verbatim>
+
+

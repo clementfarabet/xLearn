@@ -1,0 +1,27 @@
+This folder contains the interface to communicate between the
+the board and computer via ethernet connection.
+
+ethernet.c - file containing the interface functions:
+- open_socket()
+- close_socket()
+- send_frame()
+- receive_frame()
+
+The functions are in C wrapped by "lua C api" and can be called 
+from lua scripts.
+
+Makefile - creates a libethernet.so (shared library) that allows
+to use ethernet.c's functions by doing:
+require 'libethernet' and calling functions like: libethernet.close_socket().
+
+call_lib_receive.lua - an example for receiving frames;
+ opens a socket,reads 10 frames in a loop printing each 
+received frame in hexa, then closes the socket.
+Should be called (the library should exist when called): 
+lua call_lib_receive.lua  
+
+call_lib_send.lua - an example for sending frames;
+ opens a socket, sends 5 frames with 5 different strings, 
+closes the socket.
+Should be called (the library should exist when called): 
+lua call_lib_send.lua  

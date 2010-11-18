@@ -1,0 +1,110 @@
+# -*- cmake -*-
+
+INCLUDE(CheckFunctionExists)
+INCLUDE(CheckIncludeFile)
+INCLUDE(CheckCSourceCompiles)
+
+# Configure compatibility...
+# ... or how you can do complicated when you can do simple !!!
+SET(PIXMAN_VERSION_STRING "${PIXMAN_VERSION_MAJOR}.${PIXMAN_VERSION_MINOR}.${PIXMAN_VERSION_MICRO}")
+
+SET(PIXMAN_PACKAGE "pixman")
+SET(PIXMAN_PACKAGE_BUGREPORT "sandmann@daimi.au.dk")
+SET(PIXMAN_PACKAGE_NAME "pixman")
+SET(PIXMAN_PACKAGE_STRING "${PACKAGE} ${PIXMAN_VERSION_STRING}")
+SET(PIXMAN_PACKAGE_TARNAME ${PACKAGE})
+SET(PIXMAN_PACKAGE_VERSION ${PIXMAN_VERSION_STRING})
+
+# bof #
+SET(STDC_HEADERS 1)
+#######
+
+CHECK_FUNCTION_EXISTS(getisax HAVE_GETISAX)
+CHECK_INCLUDE_FILE(dlfcn.h HAVE_DLFCN_H)
+CHECK_INCLUDE_FILE(inttypes.h HAVE_INTTYPES_H)
+CHECK_INCLUDE_FILE(memory.h HAVE_MEMORY_H)
+CHECK_INCLUDE_FILE(stdint.h HAVE_STDINT_H)
+CHECK_INCLUDE_FILE(stdlib.h HAVE_STDLIB_H)
+CHECK_INCLUDE_FILE(strings.h HAVE_STRINGS_H)
+CHECK_INCLUDE_FILE(string.h HAVE_STRING_H)
+CHECK_INCLUDE_FILE(sys/stat.h HAVE_SYS_STAT_H)
+CHECK_INCLUDE_FILE(sys/types.h HAVE_SYS_TYPES_H)
+CHECK_INCLUDE_FILE(unistd.h HAVE_UNISTD_H)
+
+# MMX?
+MESSAGE(STATUS "Check for MMX")
+IF(CMAKE_COMPILER_IS_GNUCC)
+  SET(MMX_FLAGS "-mmmx -Winline --param inline-unit-growth=10000 --param large-function-growth=10000")
+ELSE(CMAKE_COMPILER_IS_GNUCC)
+  SET(MMX_FLAGS)
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
+SET(CMAKE_REQUIRED_FLAGS ${MMX_FLAGS})
+
+CHECK_C_SOURCE_COMPILES("
+#if defined(__GNUC__) && (__GNUC__ < 3 || (__GNUC__ == 3 && __GNUC_MINOR__ < 4))
+#error \"Need GCC >= 3.4 for MMX intrinsics\"
+#endif
+#include <mmintrin.h>
+int main () {
+    __m64 v = _mm_cvtsi32_si64 (1);
+    return _mm_cvtsi64_si32 (v);
+}" USE_MMX)
+
+IF(USE_MMX)
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MMX_FLAGS}")
+ENDIF(USE_MMX)
+
+# SSE?
+MESSAGE(STATUS "Check for SSE")
+IF(CMAKE_COMPILER_IS_GNUCC)
+  SET(SSE_FLAGS "-msse")
+ELSE(CMAKE_COMPILER_IS_GNUCC) 
+  SET(SSE_FLAGS) 
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
+SET(CMAKE_REQUIRED_FLAGS ${SSE_FLAGS})
+
+CHECK_C_SOURCE_COMPILES("
+#if !defined(__amd64__) && !defined(__x86_64__)
+#error \"Need x86-64 for SSE\"
+#endif
+#include <mmintrin.h>
+#include <xmmintrin.h>
+int main () {
+    __m64 v = _mm_cvtsi32_si64 (1);
+    v = _mm_shuffle_pi16 (v, _MM_SHUFFLE(3, 3, 3, 3));
+    return _mm_cvtsi64_si32 (v);
+}" USE_SSE)
+
+IF(USE_SSE)
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SSE_FLAGS}")
+ENDIF(USE_SSE)
+
+# SSE2?  
+MESSAGE(STATUS "Check for SSE2")
+IF(CMAKE_COMPILER_IS_GNUCC)
+  SET(SSE2_FLAGS "-msse2")
+ELSE(CMAKE_COMPILER_IS_GNUCC)
+  SET(SSE2_FLAGS)
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
+SET(CMAKE_REQUIRED_FLAGS ${SSE2_FLAGS})
+
+CHECK_C_SOURCE_COMPILES(
+"
+#include <mmintrin.h>
+#include <xmmintrin.h>
+int main () {
+    __m128i a, b, c;
+        c = _mm_xor_si128 (a, b);
+    return 0;
+}
+" USE_SSE2)
+
+IF(USE_SSE2)
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SSE2_FLAGS}")
+ENDIF(USE_SSE2)
+
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+ADD_DEFINITIONS(-DHAVE_CONFIG_H)
+
+SUBDIRS(pixman)

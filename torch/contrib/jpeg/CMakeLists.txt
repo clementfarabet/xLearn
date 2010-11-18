@@ -1,0 +1,9 @@
+FIND_PACKAGE(JPEG REQUIRED)
+
+SET(src jpeg.c)
+SET(luasrc init.lua)
+
+ADD_TORCH_PACKAGE(jpeg "${src}" "${luasrc}")
+
+INCLUDE_DIRECTORIES(${JPEG_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(jpeg luaT TH ${JPEG_LIBRARIES})

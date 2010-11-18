@@ -1,0 +1,474 @@
+Plotting Package Reference Manual
+
+A graphics package for plotting, containing two main objects which are
+used almost identically. [[#Window][=Window=]] creates a graphical window,
+and [[#ImageSurface][=ImageSurface=]]
+creates an off-screen surface, useful for blitting
+from or rendering to a file.
+ 
+---+ Window
+#Window 
+
+=Window= is an object for handling
+a graphical window for plotting graphs and blitting images.
+
+  
+---++ =gfx.Window(int width, int height, char* title)=
+
+_Constructor_ which creates a window with given width, height and 
+title (title of the actual physical window, not of the plot).  
+Calling =gfx.Window()= creates a window with a default size of 400 by 400.
+
+For example:
+<verbatim>
+	w=gfx.Window(100,100,'title')
+</verbatim>
+
+To call any of the methods of Window one can then do for example:
+<verbatim>
+	w:cls();
+	w:plot({0,1},{0,1},'rx-');
+</verbatim>
+
+Equivalently, one can also write:
+<verbatim>
+	gfx.cls(w);
+	gfx.plot(w,{0,1},{0,1},'rx-');
+</verbatim>
+
+---++ =cls()=
+
+Clears the graphics window and history of the window.
+
+---++ =subplot(cols,rows,index)=
+ 
+Breaks the window into an rows-by-cols matrix of small axes, 
+selects the index-th subplot for the current plot, and returns the handle. 
+The subplots are counted along the top row of the window, then the
+second row, etc.  
+
+=subplot(index)= selects the index-th subplot for the current plot, and 
+returns the handle, assuming it is already created.
+
+Here is a typical example:
+<verbatim>
+	require "lab"
+	w=gfx.Window(300,500) 
+	w:subplot(1,2,1)
+	w:hist(lab.randn(100,3))
+	w:subplot(2)
+	w:plot({5,7,8,1,3},'co:')
+</verbatim>
+
+
+---++ =plot(x,y,params)=
+
+Linear plot. 
+=plot(x,y)= plots vector =y= versus vector =x=. 
+If =x= or =y= is a
+[[../torch/index.hlp#Tensor][=Tensor=]] of size either m x 1 or 1 x m,
+then the vector is plotted versus the rows or columns of the matrix,
+whichever line up.  
+Alternatively, x and y can be of type
+=Lua= [[../LuaManual.hlp#TableConstructors][=table=]].
+
+
+
+=plot(y)= plots the columns of =y= versus their index.
+ 
+Various line types, plot symbols and colors may be obtained with
+=plot(x,y,s)= where s is a character string made from one element
+from any or all the following 3 columns:
+ 
+<verbatim>
+           y     yellow          .     point         -     solid
+           m     magenta         o     circle        :     dotted
+           c     cyan            x     cross              
+           r     red             +     plus                
+           g     green           *     star
+           b     blue            s     square
+           w     white           d     diamond
+           k     black            
+	   p     current pen color
+	   T     text 
+</verbatim>
+                          
+For example, =plot(x,y,'c+:')= plots a cyan dotted line with a plus 
+at each data point; =plot(x,y,'bd')= plots blue diamond at each data 
+point but does not draw any line.
+ 
+The =plot= command also returns a handle to the drawn object which can be used to delete 
+it, e.g:
+<verbatim>
+	w=gfx.Window()
+	p1=w:plot(1,1,'bx')
+	p2=w:plot(1,1,'go')
+	w:delete(p1)
+</verbatim> 
+
+One can also plot text using the following method:
+<verbatim>
+        w=gfx.Window()
+        w:plot({0,1,2,3},{0,1,2,3},'bThello')
+</verbatim>
+Anything after the 'T' in the argument line will be used as text and sets
+the markerText property of the window.
+
+---++ =hist(x,y,params)=
+
+Histogram.
+    
+=hist(y)= bins the elements of =y= into 10 equally spaced containers
+and returns a histogram bar plot of the results.
+
+If =y= is a matrix, =hist= works down the columns.
+ 
+=hist(y,m)=, where =m= is a scalar, uses =m= bins.
+ 
+=hist(y,x)=, where =x= is a vector, returns the distribution of =y=
+among bins with centers specified by =x=.  
+ 
+=p=hist(...)= returns a handle to the plot. 
+
+Here is a typical example of using hist: 
+<verbatim>
+	require "lab"
+	w=gfx.Window(); 
+	methods=2;
+	x=lab.randn(1000,methods);
+	w:hist(x,10)
+	w:legend('gauss1','gauss2')
+</verbatim>
+
+The =hist= command, if no color is specified, makes automatic use of
+the colors specified by the colorOrder property, e.g:
+<verbatim> 
+	require "gfx"
+	w=gfx.Window();
+	x=lab.randn(100,4);
+	p=w:hist(x,10)	
+	c=p:get('colorOrder'); 
+	for i=1,#c do 
+		print(i,c[i][1],c[i][2],c[i][3]); 
+	end
+	c[1][1]='0'; c[1][3]=1; 
+	p:set('colorOrder',c)
+</verbatim>
+The default ColorOrder is listed using the example 
+above where the
+default is red for one line, and for multiple lines, to cycle
+through the colors in the table. The last two lines of the example
+change the first color in the colorOrder to blue.  
+
+
+
+---++ =title(str)=
+
+Gives a title at the top of the window given a text string.
+
+---++ =xlabel(str)=
+
+Labels the x-axis with a given string.
+
+---++ =ylabel(str)= 
+
+Labels the y-axis with a given string.
+
+---++ =axis(x1,x2,y1,y2)=
+
+Sets the axes from the bottom left corner (x1,y1) 
+to the top right corner (x2,y2).
+
+After setting the axes, they are fixed and not adapted automatically if a plot
+is out of the currently set axes.
+
+Note that setting axes(x1,x2,y1,y2) where some of the values are nil will only change the non-nil components, and the rest will still be adapted automatically, if they have never been set, or stay fixed as they are if they have been set.
+
+=axis('on')= and =axis('off')= also enable or disable the plotting of 
+the axis themselves in the plot.
+
+
+---++ =legend(...)=
+
+
+Graph legend.
+   
+=legend(string1,string2,string3, ...)= puts a legend on the current plot
+using the specified strings as labels. =legend= works on line graphs
+and histograms, etc. 
+ 
+=legend(x,y,string1,string2,string3, ...)= puts a legend on the current plot
+at position (x,y), otherwise it defaults to the top left-hand corner.
+ 
+=legend(x,y)= repositions an already defined legend.
+
+=legend(pos,string1,string2,string3, ...)= puts a legend on the current plot
+with one of several predefined positions:
+<verbatim>
+        1 = Upper right-hand corner 
+        2 = Upper left-hand corner  (default)
+        3 = Lower left-hand corner
+        4 = Lower right-hand corner
+</verbatim>
+
+=legend(pos)= repositions an already defined legend.
+
+
+Example:
+<verbatim>
+	w=gfx.Window()
+	p1=w:plot({1,10},{1,10},'bo-') 
+	p2=w:plot({5,5},{5,3},'rx-')  
+	w:legend('blue line','red line');
+	w:legend(4)
+</verbatim>
+
+---++ =remove(p)=
+
+Removes the object with handle =p= from the plot, and redraws.
+
+Example: 
+<verbatim>
+	w=gfx.Window()
+	p1=w:plot({1,10},{1,10},'bo-') 
+	p2=w:plot({5,5},{5,3},'rx-')  
+	p1:remove();
+</verbatim>
+
+---++ Drawing primitives
+
+---+++ =batchBegin()=
+
+Begin a batch of drawing commands. They will only be displayed when
+batchEnd() is called (these calls can be nested). This means the
+drawing does not refresh the screen after every command is hence faster.
+<verbatim>
+	w=gfx.Window();
+	w:batchBegin()
+	function r() return math.random()*300; end 
+	for i=1,1000 do
+		w:line(r(),r(),r(),r()); 
+	end
+	w:batchEnd()
+</verbatim>
+
+---+++ =batchEnd()=
+
+Ends a batch of drawing commands. The last end in a list of nested
+calls does a refresh and draws the objects on the screen.
+<verbatim>
+	w=gfx.Window(); 
+	w:batchBegin()
+	function r() return math.random()*300; end 
+	for i=1,1000 do
+		w:line(r(),r(),r(),r()); 
+	end
+	w:batchEnd()
+</verbatim>
+
+---+++ =set(variable,value)=
+
+Sets the value of a variable such as penColor or fontSize for an object.
+Typical example:
+<verbatim>
+	w=gfx.Window();
+	p=w:plot({1,2,3,4})
+	w:set('fontSize',20)
+</verbatim>
+If an object such the window as in this example has children, then
+all the variables for its children are changed too. So this would 
+change the font size for all items in the plot. If you want to change
+the font size for only a single object, you should apply the set
+command to its handle instead:
+<verbatim> 
+	w=gfx.Window();
+	p=w:plot({1,2,3,4})
+	p2=w:legend('hi');
+	p2:set('fontSize',40)
+</verbatim>
+Calling =h:set()= with no arguments for a given object =h= returns the variables currently set in that object, and their assignments.
+
+---+++ =get(variable)=
+
+Gets the value of a variable such as penColor or fontSize for an object.
+Typical example:
+<verbatim>
+	w=gfx.Window();
+	print(w:get('fontSize'))
+</verbatim>
+This works for an object handle, not just a window handle. To see a list
+of possible assigned variables use =set()=.
+
+---+++ =setPenColor(table col)=
+
+Sets the pen color of an object given a table of RGB values, e.g.
+<verbatim>
+	w=gfx.Window();
+	p=w:plot({1,2,3,4})
+	p:setPenColor({1,0,0}); -- Change pen to red
+</verbatim>
+This is the same as =p:set('penColor',col)=.	
+
+---+++ =setMarkerSize(int sz)=
+
+Sets the marker size in number of pixels for any marker commands,
+such as [[#cross][=cross=]]  or [[#plus][=plus=]].
+This is the same as =p:set('markerSize',sz)=.	
+
+---+++ =setLineWidth(int width)=
+
+Sets the line width in number of pixels for any line drawing commands.
+
+---+++ =line(x1,y1,x2,y2)=
+Draw a line from point (x1,y1) to (x2,y2)
+
+---+++ =dot(x,y)=
+
+Draws a dot at (x,y).
+
+---+++ =circle(x,y)=
+
+Draws a circle with center (x,y).
+
+
+---+++ =cross(x,y)=
+#cross
+
+Draws a cross at (x,y).
+
+---+++ =plus(x,y)=
+#plus 
+
+Draws a plus at (x,y).
+
+---+++ =star(x,y)=
+
+Draws a star at (x,y).
+
+---+++ =square(x,y)=
+
+Draws a square at (x,y).
+
+---+++ =diamond(x,y)=
+
+Draws a diamond at (x,y).
+
+---+++ =rectangle(x0,y0,x1,y1)=
+	
+Draw a rectangle from point (x1,y1) to (x2,y2)
+
+---+++ =text(string str,float x,float y,float height)=
+	
+Draw a text string with top left-hand corner (x,y)
+ and height h from point (x1,y1) to (x2,y2)
+
+---++ Rendering to/from Tensors
+
+---+++ =blit(Tensor x,float scale,int xpos,int ypos)=
+
+Blits a tensor as an image at the location (xpos,ypos) and
+scaled by the scaling factor <scale>. 
+scale is 1 by default if not supplied.
+(xpos,ypos) is (0,0) by default if not suppled.
+
+If scale is 1 then 1 pixel corresponds to 1 location in a Tensor.
+If the Tensor is a 2-dimesional m x n then the image would be 
+grey-scale with width m and height n. The elements of the Tensor
+should be values between 0 and 1.
+<verbatim>
+	w=gfx.Window();
+	x=torch.Tensor(100,50);
+	x:zero();
+	for i=1,100 do
+		x[i][math.floor((i+1)/2)]=1;
+	end
+	w:blit(x); -- blit grey line on black background
+</verbatim>
+
+If the Tensor is a 3-dimesional m x n x 3 then the image would be RGB
+(corresponding to the 3rd dimension) with width m and height n.
+The elements of the Tensor should be values between 0 and 1.
+<verbatim>
+	w=gfx.Window();
+	x=torch.Tensor(100,50,3);
+	x:zero();
+	for i=1,100 do
+		x[i][math.floor((i+1)/2)][1]=1;
+	end
+	w:blit(x); -- blit red line on black background
+</verbatim>
+
+---+++ =toTensor(Tensor x)=
+
+Converts the current graphics image into a tensor, given a tensor.
+
+If the window size is m x n then the tensor must also be m x n x 1,
+in which case the image is converted to grey-scale, or else
+m x n x 3 in which case the RGB components are stored in the third
+dimension.
+
+Here is a typical example:
+<verbatim>
+	w=gfx.Window();
+	w:line(0,0,400,400)
+	x=torch.Tensor(w.width,w.height); -- copy contents
+	w:toTensor(x) 
+	w2=gfx.Window(w.width/2,w.height/2); -- create a smaller window
+	w2:blit(x,0.5); -- blit contents to it at half size.
+</verbatim> 
+
+
+---+++ =loadPNG(string fname,int depth)=
+
+Loads a PNG file into a tensor.
+
+If depth=1 the PNG is converted into a grey-scale image, and the tensor
+is an mxn where m is the width and n is the height of the image.
+
+If depth=3 the PNG is converted in RGB color, 
+and the tensor is an m x n x 3, where
+the last dimension indexes the RGB components of the image.
+
+If depth=4 the tensor is an m x n x 4 where the last dimension indexes
+the RGBA components of the image.
+
+Here is a typical example:
+<verbatim>
+	w=gfx.Window();
+	x=gfx.loadPNG('logo.png',3);	
+	w:blit(x);
+</verbatim>
+ 
+
+
+---++ Rendering to a file (PNG, PDF or PS)
+   
+---+++  =writePNG(string fname)=
+
+Writes out the current image as a PNG.
+ 
+---+++  =writePDF(string fname)=
+
+Writes out the current image as a PDF.
+
+---+++  =writePS(string fname)=
+
+Writes out the current image as a PS file.
+ 
+---+ ImageSurface
+#ImageSurface 
+
+=ImagSurface= is an object to handling
+an off-screen surface for plotting graphs and blitting images.
+
+The methods are the same as for [[#Window][=Window=]],
+ apart from the constructor itself. 
+
+---++ =gfx.ImageSurface(int width, int height)=
+#ImageSurface
+
+_Constructor_ which creates a off-screen surface 
+ with given width and height.
+Calling =gfx.ImageSurface()= creates a window with a default size of 
+400 by 400.
+

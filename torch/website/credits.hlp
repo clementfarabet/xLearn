@@ -1,0 +1,30 @@
+Credits
+
+   $ [[http://ronan.collobert.com][*Ronan Collobert*]]: Designed the =Torch5= system.
+    Author of the =torch= core package.
+    Implemented Matlab-like operations with the =lab=  package.
+    Implemented neural networks with the =nn= package.
+    Implemented =random= package for random number generation.
+    Integrated the =Lua= [[http://luaforge.net/projects/lposix/][=posix=]] package in =Torch5=.
+    Provided classical machine learning measure with the =ml= package.
+    Wrote the =help= package.
+
+   $ [[http://bengio.abracadoudou.com][*Samy Bengio*]]: Implemented distributions (GMM, HMM...) with the =distr= package.
+     Implemented non-parametric algorithms (Parzen, KNN) in the =np= package.
+     Wrote the =speech= package which allows speech applications.
+
+   $ [[http://leon.bottou.org][*Leon Bottou*]]: Implemented QT Lua and graphics packages for powerful
+     multi-platform GUI and graphics.
+
+   $ [[http://www.kyb.tuebingen.mpg.de/bs/people/weston][*Jason Weston*]]: Author of the plotting =gfx= package.
+     Provided image manipulations functions with the =image= package.
+     Implemented the _tables_ gradient machines in the neural network =nn= package.
+     Wrote most of the doc of =lab= and =nn= packages.
+
+   $ *Iain Melvin*: Author of the =lcairo= package, which provides a [[http://cairographics.org/][=Cairo=]] backend to =Torch5=.
+   Integrated the [[http://libmpeg2.sourceforge.net/][=mpeg2= library]] in =Torch5= through the =mpeg2= package.
+
+   $ *Special Thanks...*:  ... to the following people:
+      $ [[http://leon.bottou.org][*Leon Bottou*]] and [[http://yann.lecun.com][*Yann Le Cun*]]: The =Tensor= class design and the gradient machines are strongly inspired from
+      their _SN_ library now available as the [[http://lush.sourceforge.net][Lush]] library.
+      $ [[http://www.idiap.ch/~monay][*Florent Monay*]]: Designed the beautiful =Torch= logo.

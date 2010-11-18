@@ -1,0 +1,9 @@
+# Find the Cairo includes and library
+#
+# CAIRO_INCLUDE_DIR -- where to find the includes
+# CAIRO_LIBRARIES -- list of libraries to link against
+# CAIRO_FOUND -- set to 1 if found
+
+SET(CAIRO_FOUND 1)
+SET(CAIRO_INCLUDE_DIR "@CAIRO_INCLUDE_DIR@")
+SET(CAIRO_LIBRARIES "@CAIRO_LIBRARIES@")

@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Should give an arg
+if [ $# == 0 ]
+then
+    echo "syntax:"
+    echo "  get-dataset dataset"
+    echo "  dataset = faces | spanish | mnist | lagr"
+    exit
+fi
+
+mkdir -p datasets
+if which wget >/dev/null; then
+    if [ $1 == "faces" ] 
+    then
+        echo "Installing Faces Dataset"
+        TARNAME=faces_cut_yuv_32x32.tar.gz
+        cd datasets
+        rm -f $TARNAME
+        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
+        tar -xvf $TARNAME
+        rm -f $TARNAME
+        echo "Faces Dataset installed in datasets/"
+        exit
+    fi
+    if [ $1 == "spanish" ]
+    then
+        echo "Installing Spanish Dataset"
+        cd datasets
+        TARNAME=spanish_dataset.tar.gz
+        rm -f $TARNAME
+        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
+        tar -xvf $TARNAME
+        rm -f $TARNAME
+        echo "Spanish Dataset installed in datasets/"
+    fi
+    if [ $1 == "mnist" ]
+    then
+        echo "Installing MNIST Dataset"
+        cd datasets
+        TARNAME=mnist.tar.gz
+        rm -f $TARNAME
+        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
+        tar -xvf $TARNAME
+        rm -f $TARNAME
+        echo "MNIST Dataset installed in datasets/"
+    fi
+    if [ $1 == "lagr" ] 
+    then
+        echo "Installing LAGR Groundtruth test data"
+        TARNAME=lagr_groundtruth.tgz
+        cd datasets
+        rm -f $TARNAME
+        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
+        tar -xvf $TARNAME
+        rm -f $TARNAME
+        echo "LAGR test data installed in datasets/"
+        exit
+    fi
+else
+    echo "Wget couldn't be found. Install it with:"
+    echo "sudo port install wget , then retry"
+    echo "(or sudo apt-get install wget)"
+fi
+
+

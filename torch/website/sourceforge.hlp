@@ -1,0 +1,17 @@
+<extended>SourceForge
+
+---+ Project Page
+
+See the [[http://www.sourceforge.net/projects/torch5][SourceForge page]] for information on our project.
+
+---+ Browsing Sources
+
+You can browse our sources with the [[http://torch5.svn.sourceforge.net][SourceForge SVN browser]].
+
+---+ Mailing List
+
+You might want to subscribe to the
+[[https://lists.sourceforge.net/lists/listinfo/torch5-devel][devel mailing list]],
+to be aware of bug corrections, possible API changes, or new
+features. Previous posts can be seen on the
+[[http://sourceforge.net/mailarchive/forum.php?forum_name=torch5-devel][mailing list archive]].

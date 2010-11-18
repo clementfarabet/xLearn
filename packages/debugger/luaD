@@ -1,0 +1,3 @@
+#!/bin/bash
+
+qlua -ldebugger $1

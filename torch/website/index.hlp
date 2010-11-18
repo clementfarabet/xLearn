@@ -1,0 +1,58 @@
+<extended>Torch 5
+
+---+ What's Torch?
+
+=Torch5= provides a Matlab-like environment for state-of-the-art machine
+learning algorithms. It is _easy_ to use and provides a very _efficient_
+implementation, thanks to [[manual/Lua.hlp][an easy and fast scripting language]]
+[[manual/LuaManual.hlp][(=Lua=)]] and a underlying =C= implementation.
+
+=Torch5= is the official successor of [[http://www.torch.ch][=Torch3=]], and is now developed
+at [[http://ml.nec-labs.com][=NEC Laboratories America=]] and =Google Labs=.
+
+---+ License
+
+=Torch5= is distributed under a [[manual/License.hlp][BSD license]]. It
+makes now heavy use of [[http://www.trolltech.com][the QT cross-platform framework]],
+distributed under the [[manual/QTLicense.hlp][GPL license]] with
+an [[manual/QTLicenseException.hlp][exception]] when linked against BSD free software.
+You may want to buy a commercial version of QT if it better suits your needs.
+
+---+ Availability
+
+=Torch5= runs on =Linux=, =MacOS X= and native =Windows=.
+It is hosted on [[http://sourceforge.net/projects/torch5][Sourceforge]].
+
+See the [[manual/Install.hlp][installation manual]] for download and installation details.
+
+If you use =Torch5= on a regular basis, it is recommended to subscribe to the
+[[https://lists.sourceforge.net/lists/listinfo/torch5-devel][devel mailing list]],
+to be aware of bug corrections, possible API changes, or new features.
+
+---+ News
+   $ _October 3, 2008_: QT is now our default GUI backend. [[manual/Install.hlp][Installation instructions]] updated.
+     We also provide now [[download.hlp][binary installers]] for several common platforms.
+
+   $ _September 16, 2008_: *SVN repository has been cleaned up*. You will have to checkout again the
+     repository using the new [[download.hlp][download instructions]]. Sorry for the inconvenience.
+
+   $ _August 16, 2008_: *We moved our Torch repository from CVS to SVN*. Please [[download.hlp][checkout]]
+     the new repository.
+
+   $ _August 14, 2008_: Torch =Tensor= and =Storage= can now address more than 2G of RAM (on 64 bits systems),
+     as we converted the size type from =int= to =long=. This should have few impacts
+     on the code. Previously saved models should still load, as a versioning procedure has been
+     introduced in the class system.
+
+   $ _June 4, 2008_: Thanks to [[http://leon.bottou.org][Leon Bottou]], we now have a powerful
+     interface between QT and Lua integrated in Torch. Note that CMake 2.6 or higher is now required under
+     Windows, and CMake 2.4.8 or higher is required under MacOS X.
+
+   $ _May 13, 2008_: The =Torch5= website is now up. The official version is now Torch 5.1. Please
+     be careful: the [[download.hlp][CVS location changed]].
+
+   $ _June 21, 2007_: Stable version =Torch 5.0= available on =SourceForge CVS=.
+
+   $ _December 06, 2006_: Preliminary =Torch5= version available on =SourceForge CVS=.
+
+   $ _November 27, 2006_: Project =Torch5= created on [[http://sourceforge.net/projects/torch5][=SourceForge=]].

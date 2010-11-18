@@ -1,0 +1,206 @@
+Portable Graphic Layer Reference Manual
+
+
+Package =graphics= contains a thin compatibility layer
+that can be used to produce graphics using
+either the Cairo facilities provided by 
+package [[../lcairo/index.hlp][=lcairo=]]
+or the Qt facilities provided by 
+package [[../qtwidget/index.hlp][=qtwidget=]].
+This compatibility layer is used by the 
+plotting package [[../gfx/index.hlp][=gfx=]].
+
+
+---+++ Functions
+
+The following four functions 
+return [[#graphicssurface][drawing surface descriptors]]
+for various target devices.
+
+
+---++++ graphics.newwindow(w,h,[title]) 
+#graphicsnewwindow
+
+Expression =graphics.newwindow(w,h,title)= creates a new 
+window and returns a [[#graphicssurface][drawing surface descriptor]].
+Numerical arguments =w= and =h= specify the size of the widget.
+String argument =title= specifies a window title.
+
+
+---++++ graphics.newimage(...)
+#graphicsnewimage
+
+Function =graphics.newimage= returns a 
+[[#graphicssurface][drawing surface descriptor]]
+for an offscreen image.
+
+There are several ways to specify its arguments:
+
+   * =graphics.newimage(w,h)=
+
+     Creates an image of width =w= and height =h=.
+
+   * =graphics.newimage(pngfile)=
+
+     Creates an image by loading the contents 
+     of the PNG file named =pngfile=.
+
+   * =graphics.newimage(tensor)=
+
+     Creates an image by extracting the contents 
+     of the specified [[../torch/index.hlp#Tensor][=torch.Tensor=]].
+     Tensor =tensor= must have 2 or 3 dimensions.
+     The first dimension defines the image width.
+     The second dimension defines the image height.
+     The third dimension size must be 1, 3, or 4
+     for monochrome, rgb, and rgba images respectively.
+     Each component is a floating point number in range 0 to 1.
+
+
+---++++ graphics.newps(w,h,filename)
+#graphicsnewps
+
+Expression =graphics.newps(w,h,filename)= returns 
+[[#graphicssurface][drawing surface descriptor]] for a 
+PostScript file =filename=.
+Arguments =w= and =h= specify the size of the drawing area.
+
+---++++ graphics.newpdf(w,h,filename)
+#graphicsnewpdf
+
+Expression =graphics.newps(w,h,filename)= returns 
+[[#graphicssurface][drawing surface descriptor]] for a PDF file =filename=.
+Arguments =w= and =h= specify the size of the drawing area.
+
+
+---+++ Drawing Surfaces
+#graphicssurface
+
+Code that paints on a drawing surface should
+be bracketed by calls to functions 
+[[#surfacebegin][=surface:begin()=]] and
+and [[#surfaceend][=surface:theEnd()=]].
+Function [[#surfacebegin][=surface:begin()=]]
+return the [[#graphicsport][drawing port descriptor]] 
+than should be used to call painting functions.
+
+
+   * When using [[../qt/index.hlp#qlua][=qlua=]], 
+     both the [[#graphicssurface][drawing surfaces descriptors]]
+     and the [[#graphicsport][drawing port descriptors]]
+     are the descriptors returned by the
+     [[../qtwidget/index.hlp#highlevel][high level interface]] 
+     of package [[../qtwidget/index.hlp][=qtwidget=]].
+     All the [[../qtwidget/index.hlp#qtluapainterfunctions][painting functions]]
+     defined by package [[../qtwidget/index.hlp][=qtwidget=]] 
+     are therefore available. 
+     However, to write portable code, you must restrict 
+     yourself to the Cairo-style functions defined
+     for the [[#graphicsport][drawing port]] descriptors.
+
+   * When using the ordinary Lua interpreter,
+     the [[#graphicssurface][drawing surface descriptors]]
+     are tables containing Cairo windows or Cairo surfaces.
+     The [[#graphicsport][drawing port descriptors]]
+     are [[../lcairo/index.hlp][Cairo drawing contexts]].
+     Therefore all the painting functions defined
+     by package =lcairo= are available.
+
+
+
+---++++ surface:begin()
+#surfacebegin
+
+Expression =surface:begin()= returns a
+[[#graphicsport][drawing port descriptor]]
+suitable for drawing on the surface.
+Calls to =surface:begin= and =surface:theEnd= must be balanced.
+
+
+---++++ surface:theEnd()
+#surfaceend
+
+Expression =surface:theEnd()= terminates 
+a segment of Lua code that draws on the surface.
+Calls to =surface:begin= and =surface:theEnd= must be balanced.
+Drawings only appear on the surface after 
+the last call to =surface:theEnd=.
+However you can use [[#surfacerefresh][=surface:refresh()=]]
+at any time to cause an immediate display of the current drawings
+
+
+---++++ surface:refresh()
+#surfacerefresh
+
+Expression =surface:refresh()= immediately updates
+the surface to ensure that the current drawings are visible.
+
+---++++ surface.width
+
+Expression =surface.width= contains the width of the drawing area
+expressed in pixels.  Do not change.
+ 
+---++++ surface.height
+
+Expression =surface.height= contains the height of the drawing area
+expressed in pixels.  Do not change.
+
+
+---++++ surface:close()
+
+Expression =surface:close()= closes the window 
+and deallocates the surface.
+
+
+---++++ surface:valid()
+
+Expression =surface:valid()= returns =false= if the 
+underlying drawing target is no longer valid,
+for instance because the window has been closed.
+Otherwise it returns =true=.
+
+
+---++++ surface:onResize(f)
+
+Expression =desc:onResize(f)= is only available 
+when the surface descriptor corresponds to a window.
+It ensures that function =f(w,h)= gets called 
+whenever the window size changes. 
+The function arguments =w= and =h= indicate the new window size.
+Each call of =desc:onResize= replaces the 
+previous callback function by =f=.
+Calling it with argument =nil= removes 
+the current callback.
+
+---++++ surface:write_to_png(filename)
+
+Expression =surface:write_to_png(filename)=
+writes the content of the window or image surface =surface=
+into the PNG file =filename=.  
+This function is not available for PDF and PS surfaces.
+
+---++++ surface:toTensor()
+
+Expression =surface:toTensor()= returns a 
+[[../torch/index.hlp#Tensor][=torch.Tensor=]]
+initialized with the RGBA data of the window or image surface =surface=.
+This function is not available for PDF and PS surfaces.
+
+
+---+++ Drawing Ports
+#graphicsport
+
+
+Once you have a drawing port descriptor,
+you can use all the drawing functions
+defined by package [[../lcairo/index.hlp][=lcairo=]].
+When using [[../qt/index.hlp#qlua][=qlua=]], 
+these functions are emulated using the
+[[../qtwidget/index.hlp#qtluapainterfunctions][painting functions]]
+defined by package [[../qtwidget/index.hlp][=qtwidget=]].
+When using [[../lcairo/index.hlp][=lcairo=]],
+these functions are native.
+
+
+
+
