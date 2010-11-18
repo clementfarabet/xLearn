@@ -1,5 +1,6 @@
 Copyright (c) 2009-2010 New York University, Yale University
-Contributors: Clement Farabet, Benoit Corda, Polina Akselrod
+Contributors: Clement Farabet, Benoit Corda, Polina Akselrod, 
+              Koray Kavukcuoglu, Yann LeCun, Eugenio Culurciello
 
 Copyright (c) 2006-2008 NEC Laboratories America
 Contributors: Ronan Collobert, Leon Bottou, Jason Weston, Iain Melvin
