@@ -112,6 +112,7 @@ local function oprint(...)
 end
 
 function pretty(...)
+   local arg = {...}
    for i,val in ipairs(arg) do
       oprint(val2str(val))
    end

@@ -21,6 +21,9 @@ extern int toolbox_fillFloatTensor(lua_State *L);
 extern int toolbox_fillByteTensor(lua_State *L);
 extern int toolbox_createTable(lua_State *L);
 extern int toolbox_getMicroTime(lua_State *L);
+extern int toolbox_spatialDist(lua_State *L);
+
+extern int toolbox_dist2vectors(lua_State *L);
 
 /*
 extern int toolbox_ncursePrint(lua_State *L);
@@ -41,7 +44,9 @@ static const struct luaL_reg extraroutines [] = {
   {"fillByteTensor", toolbox_fillByteTensor},
   {"fillFloatTensor", toolbox_fillFloatTensor},
   {"usleep", toolbox_usleep},
+  {"spatialDist", toolbox_spatialDist},
   {"createTable", toolbox_createTable},
+  {"Dist2",toolbox_dist2vectors},
   /*
   {"ncurseStart", toolbox_ncurseStart},
   {"ncurseEnd", toolbox_ncurseEnd},

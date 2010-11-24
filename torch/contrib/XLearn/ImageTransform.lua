@@ -83,11 +83,13 @@ function ImageTransform:upgradeParameters()
 end
 
 function ImageTransform:forward(input)
-   return self.linear:forward(input)
+   self.output = self.linear:forward(input)
+   return self.output
 end
 
 function ImageTransform:backward()
-   return self.linear:backward()
+   self.gradInput = self.linear:backward()
+   return self.gradInput
 end
 
 function ImageTransform:write(file)

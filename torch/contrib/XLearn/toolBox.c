@@ -139,6 +139,75 @@ int toolbox_getMicroTime(lua_State *L) {
   return 1;
 }
 
+int toolbox_spatialDist(lua_State *L) {
+  // args
+  THTensor *proto = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *maps = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *dists = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *temp = luaT_checkudata(L, 4, luaT_checktypename2id(L, "torch.Tensor"));
+
+  // vars
+  int k;
+  THTensor *map = THTensor_new();
+
+  // zero temp
+  THTensor_zero(dists);
+
+  // compute dist
+  for (k = 0; k < proto->size[0]; k++) {
+    THTensor_select(map, maps, 2, k);
+
+    THTensor_copy(temp, map);
+    THTensor_add(temp, -THTensor_get1d(proto,k));
+    THTensor_cmul(temp, temp);
+
+    THTensor_addTensor(dists, 1.0, temp);
+  }
+
+  // sqrt
+  THTensor_sqrt(dists);
+  THTensor_div(dists, proto->size[0]);
+
+  return 0;
+}
+
+int toolbox_dist2vectors(lua_State *L){
+  /* get the arguments */
+  THTensor * tensor = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));//luaT_toudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * src = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));//luaT_toudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  double * data_prot = tensor->storage->data+ tensor->storageOffset;
+  double * data_out = src->storage->data+ src->storageOffset;
+  int size = tensor->size[0];//*tensor->size[1];
+  
+  int i;
+  
+  double sum = 0;
+  double diff = 0;
+  /* for (i = 0; i < size; i++){ */
+/*     printf("data_prot = %f\n", data_prot[i]); */
+/*   } */
+
+
+  for (i = 0; i < size; i++){
+    //printf("data_prot = %f\n", data_prot[i]);
+    //printf("data_out = %f\n", data_out[i]);
+    diff = fabs(data_prot[i] - data_out[i]);
+    //printf("diff = %f\n", diff);
+    sum += diff*diff;
+  }
+  //printf("sum = %f\n", sum);
+  sum = sqrt(sum);
+  sum = sum/size; 
+
+  //printf("sqrt of sum = %f\n", sum);
+  lua_pushnumber(L, sum);
+  return 1;
+}
+
+
+
+
+
 /*
 int toolbox_ncurseStart(lua_State *L) {
   initscr();
