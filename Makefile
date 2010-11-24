@@ -1,9 +1,10 @@
-.PHONY: all install help camiface luajit clean
+.PHONY: build install help camiface luajit clean
 
 INSTALL_PREFIX=/usr/local
 USE_OPENCV=0
 USE_CAMIFACE=0
 USE_NEUFLOW=0
+USE_XFLOW=0
 USE_JPEG=0
 USE_MPEG2=0
 USE_LUAJIT=0
@@ -14,9 +15,9 @@ EXPORT=xLearn-beta
 help:
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "usage (Linux/MacOS)"
-	@-echo "  make [options] all       ? builds all the base/optional packages"
+	@-echo "  make [options] build     ? builds all the base/optional packages"
 	@-echo "  make [options] install   ? builds + installs all the packages"
-	@-echo "  make [options] export    ? exports the entire project into EXPORT.tgz"
+	@-echo "  make [options] export    ? exports the entire project into ${EXPORT}.tgz"
 	@-echo "  make [options] luajit    ? builds/installs LuaJIT, with Torch bindings (speeds up Lua interpretation by a lot!!)"
 	@-echo "  make update              ? just updates the install, without reconfiguring (useful for dev)"
 	@-echo ""
@@ -27,6 +28,7 @@ help:
 	@-echo "  USE_OPENCV=1   [default=0]   ? OpenCV 2.x Lua wrapper (Linux webcam), requires OpenCV 2.x"
 	@-echo "  USE_CAMIFACE=1 [default=0]   ? LibCamiface + Lua wrapper (MacOS webcam)"
 	@-echo "  USE_NEUFLOW=1  [default=0]   ? Compiler + DevTools for the NeuFlow arch"
+	@-echo "  USE_XFLOW=1     [default=0]   ? xFlow tools (xFlow parser/compiler + luaFlow framework)"
 	@-echo "  USE_JPEG=1     [default=0]   ? LibJpeg wrapper"
 	@-echo "  USE_MPEG2=1    [default=0]   ? LibMpeg2 wrapper"
 	@-echo "  USE_BITOP=0    [default=1]   ? LuaBitOP library (bitwise operators for Lua)"
@@ -52,9 +54,9 @@ help:
 	@-echo "    $ sudo make USE_NEUFLOW=1 USE_OPENCV=1 install"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
-all: camiface luajit
+build: camiface luajit
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
 
 camiface:
 ifeq (${USE_CAMIFACE},1)
@@ -73,7 +75,7 @@ extrabins:
 	@-cp "packages/debugger/luaD" ${INSTALL_PREFIX}"/bin/luaD"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/luaD"
 
-install: all extrabins
+install: build extrabins
 	@-cd torch/scratch && make install
 ifeq (${USE_CAMIFACE},1)
 	@-cd camiface/scratch && make install
