@@ -1,0 +1,156 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; xFlow example: a typical neural net, with preprocessing
+;;
+;; note about xFlows: flows are not sequential programs, they
+;; are graphs, and therefore can be expressed in any order, 
+;; very much like hardware description languages.
+;;
+;; to better understand what's going on here:
+;; (<>-node xx) declares a node with name xx.
+;; Declaring a data-node also instantiates it (plain type), 
+;; whereas declaring a compute-node does not.
+;; > (xx <>) instantiates the node xxx, making it 
+;;   available with an internal state
+;; > (xxx <>) or xxx can be used to recall an existing data-node.
+;;
+(require lib-math)
+(require lib-neural)
+(version 0.2)
+
+;; Declare an RGB 2 YUV converter
+(compute-node rgb-2-yuv
+
+              ;; RGB input
+              (input-node rgb-in (tensor (dim 3 ? ?) (type float)))
+              
+              ;; Conversion matrix
+              (data-node rgb2yuv (tensor (dim 3 3) (type float) 
+                                         (value 0.299 0.587 0.114
+                                                -0.14713 -0.28886 0.436
+                                                0.615 -0.51499 -0.10001)))
+              
+              ;; RGB > YUV transform. linear-combination is a predefined
+              ;; module with three ports: input, weight, and output.
+              (linear-combination (input rgb-in)
+                                  (weight rgb2yuv)
+                                  (output yuv-out))
+              
+              ;; YUV result
+              (output-node yuv-out (tensor)))
+
+
+;; Declare a 1-layer convnet, with a linear classifier output
+(compute-node convnet-cf
+
+              ;; RGB input
+              (input-node rgb-image (tensor (dim 3 ? ?)) (type float))
+
+              ;; convert input to YUV
+              (rgb-2-yuv (rgb-in rgb-image)
+                         (yuv-out yuv-image))
+
+              ;; YUV image
+              (data-node yuv-image (tensor))
+
+              ;; Normalize input
+              (data-node norm-kernel (tensor (dim 3 3 3) 
+                                             (value 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1
+                                                    0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1
+                                                    0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1)))
+              (std-normalization-2d (input yuv-image)
+                                    (mean-kernel norm-kernel)
+                                    (std-kernel norm-kernel)
+                                    (output norm-image))
+                            
+              ;; Normalized image
+              (data-node norm-image (tensor))
+              
+              ;; Apply a filter bank on the Y chanel
+              (input-node weight-0 (tensor (dim 6 5 5) (type float)))
+              (input-node bias-0 (tensor (dim 6) (type float)))
+
+              (linear-filter-bank-2d (input  norm-image)
+                                     (bias   bias-0)
+                                     (weight weight-0)
+                                     (connex (tensor (dim 6 2) (value 0 0
+                                                                      0 1 
+                                                                      1 2
+                                                                      1 3 
+                                                                      2 4 
+                                                                      2 5)))
+                                     (output features))
+              
+              ;; Feature vectors:
+              (data-node features (tensor))
+
+              ;; Transform features through a non-linear activation unit
+              (math (x features)
+                    (tanh-x- activations))
+
+              ;; Activation vector:
+              (data-node activations (tensor))
+              
+              ;; Classifier: from 6 vectors, produce 2 classes
+              (input-node weight-1 (tensor (dim 2 6) (type float)))
+              (input-node bias-1 (tensor (dim 2) (type float)))
+              (linear-combination (input activations)
+                                  (weight weight-1)
+                                  (bias bias-1)
+                                  (output classification))
+              
+              ;; Activation vectors:
+              (output-node classification (tensor)))
+
+
+;; Instantiate the convnet, and connect its I/Os to global I/Os
+;; but initialize the content of weight/bias vectors
+;; The compiler should return an object 'convnet-cf' with two slots available:
+;; rgb-image (input) and classification (output)
+(input-node in1 (tensor))
+(output-node out1 (tensor))
+(convnet-cf
+ (rgb-image in1)
+ (classification out1)
+ (weight-0 (tensor 
+            (dim 6 5 5)
+            (value 0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4
+                   0.2132e-1 1.4234e-3 0.7879e-1 1.4745e-3 -1.0e-4)
+            ))
+ (bias-0 (tensor (dim 6) (value 0.4 0.7 0.9 -0.3 0.1 0.005)))
+ (weight-1 (tensor (dim 2 6)
+                   (value 0.299 0.587 0.114 0.299 0.587 0.114
+                          -0.13 -0.28 0.43 0.615 -0.514 -0.11)))
+ (bias-1 (tensor (dim 2) (value -0.3 0.1))))

@@ -1,0 +1,35 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; xFlow simple example
+;;
+(require lib-math)
+(require lib-neural)
+(version 0.2)
+
+;; Declare an RGB 2 YUV converter
+(compute-node rgb-2-yuv
+
+              ;; RGB input
+              (input-node rgb-in (tensor (dim 3 ? ?)) (type float))
+              
+              ;; Conversion matrix
+              (data-node rgb2yuv (tensor (dim 3 3) (type float) 
+                                         (value 0.299 0.587 0.114
+                                                -0.14713 -0.28886 0.436
+                                                0.615 -0.51499 -0.10001)))
+              
+              ;; YUV result
+              (output-node yuv-out (tensor))
+
+              ;; RGB > YUV transform. linear-combination is a predefined
+              ;; module with three ports: input, weight, and output.
+              (linear-combination (input rgb-in)
+                                  (weight rgb2yuv)
+                                  (output yuv-out)))
+
+;; define I/Os
+(input-node in (tensor (dim 3 ? ?) (type float)))
+(output-node out (tensor))
+
+;; instantiate rgb converter
+(rgb-2-yuv (rgb-in in)
+           (yuv-out out))

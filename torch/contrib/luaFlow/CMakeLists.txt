@@ -2,8 +2,7 @@
 SET(src)
 
 SET(luasrc init.lua 
-           luaflow.lua  
-           neuflow.lua
-           cudaflow.lua)
+           Array.lua  
+           Node.lua)
 
 ADD_TORCH_PACKAGE(luaFlow "${src}" "${luasrc}")
