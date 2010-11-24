@@ -146,8 +146,23 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
 
             -- load all kernels
             for i = 1,sim_convs do
-               self:configPort{index = i, action = 'fetch+read+sync+close', data = kernels[cur_k+i]}
+               self:configPort{index = i, action = 'fetch+read', data = kernels[cur_k+i]}
+            end
+
+            -- sync kernels
+            for i = 1,sim_convs do
+               self:configPort{index = i, action = 'sync+close'}
                self:registerKernel{address = i}
+            end
+
+            -- prefetch all inputs
+            for i = 1,sim_convs do
+               self:configPort{index = 2+i, action = 'prefetch', data = inputs[cur_i+i]}
+            end
+
+            -- at cycle 2 and more, reread previous result
+            if cyc > 1 then
+               self:configPort{index = 2, action = 'prefetch', data = outputs[o]}
             end
 
             -- config all conv tiles to exec convolutions
@@ -229,12 +244,8 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
 
             -- at cycle 2 and more, reread previous result
             if cyc > 1 then
-               self:configPort{index = 2, action = 'fetch+read', data = outputs[o]}
-            end
-
-            -- prefetch all inputs
-            for i = 1,sim_convs do
-               self:configPort{index = 2+i, action = 'prefetch', data = inputs[cur_i+i]}
+               self:configPort{index = 2, action = 'sync-prefetch'}
+               self:configPort{index = 2, action = 'activate'}
             end
 
             -- read all inputs
@@ -298,9 +309,6 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
          if (self.msg_level == 'detailled') then
             self:message('conv.bank.cycle.'..cyc)
          end
-	 if(self.msg_level == 'freezing' and inputs[1].h == 283) then
-	    self:message('conv.bank.cycle.'..cyc)
-	 end
 
          -- simulatenous convs for this cycle:
          local sim_convs = nconvs
@@ -314,16 +322,7 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
             self:configTile{operation = 'CONV2D',
                             address = o,
                             inputs = {[2] = {source = o, data = kernels[cur_k+o]}}}
-	    print_in_core = false
-	    if(self.msg_level == 'freezing' and inputs[1].h == 283) then
-	       self:message('b p')
-	       print_in_core = true
-	    end
-            self:configPort{index = o, action = 'fetch+read+sync+close', data = kernels[cur_k+o], print = print_in_core }
-	    if(self.msg_level == 'freezing' and inputs[1].h == 283) then
-	       self:message('a p')
-	       print_in_core = false
-	    end
+            self:configPort{index = o, action = 'fetch+read+sync+close', data = kernels[cur_k+o]}
             self:registerKernel{address = o}
             self:configTile{operation = 'CONV2D', address = o, activate = false}
          end
@@ -342,16 +341,6 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
 
             
             if coefs then
-	       -- local even
--- 	       local odd
--- 	       if (coefs.even == 1) or (coefs.even == true) then
--- 		  even = 1
--- 	       else even = 0
--- 	       end
--- 	       if (coefs.odd == 1) or(coefs.odd == true) then
--- 		  odd = 1
--- 	       else odd = 0
--- 	       end
                -- mapper is used for the last segment
                self:configTile{operation = 'MAPPING',
                                address = o,
@@ -402,7 +391,106 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
 
    -- one kernel per input, this is a 1 to 1 layer
    elseif #inputs == #outputs and #inputs == #kernels then 
-      error('<CoreUser:convolveBankAndMap> 1-to-1 bank not implemented yet')
+      -- compute all convolutions, by groups of [nconvs]
+      local nconvs = math.floor(grid.nb_ios/2)
+      local nb_cycles = math.ceil(#outputs / nconvs)
+      local last_cycle = nb_cycles*nconvs - #outputs
+      local cur_k = 0
+      local cur_o = 0
+      local cur_i = 0
+      for cyc = 1,nb_cycles do
+         self:startProcess()
+         -- message
+         if (self.msg_level == 'detailled') then
+            self:message('conv.bank.cycle.'..cyc)
+         end
+
+         -- simulatenous convs for this cycle:
+         local sim_convs = nconvs
+         if cyc == nb_cycles and (last_cycle ~= 0) then
+            -- partially filled grid
+            sim_convs = #outputs - cur_o
+         end
+
+         -- config all conv tiles to receive kernels
+         for o = 1,sim_convs do
+            self:configTile{operation = 'CONV2D',
+                            address = o,
+                            inputs = {[2] = {source = o, data = kernels[cur_k+o]}}}
+            self:configPort{index = o, action = 'fetch+read+sync+close', data = kernels[cur_k+o]}
+            self:registerKernel{address = o}
+            self:configTile{operation = 'CONV2D', address = o, activate = false}
+         end
+
+         -- config all conv tiles to exec convolutions
+         for o = 1,sim_convs do
+            -- for the inputs
+            local i = o
+
+            -- Conv o, result goes to mapper
+            self:configTile{operation = 'CONV2D',
+                            address = o,
+                            config = {bias = 'on'},
+                            inputs = {[1] = {source = i, data = inputs[cur_i+i]},
+                                      [2] = {data = kernels[cur_k+o]}},
+                            outputs = {[1] = {dest = 'east', data = outputs[cur_o+o]}},
+                            control = 3,
+                            activate = true}
+
+            
+            if coefs then
+               -- mapper is used for the last segment
+               self:configTile{operation = 'MAPPING',
+                               address = o,
+                               config = {mode = {even=coefs.even, 
+                                                 odd=coefs.odd}, 
+                                         segments = coefs},
+                               inputs = {[1] = {source = 'north'}},
+                               outputs = {[1] = {dest = nconvs+o}},
+                               activate = true}
+            else
+               -- mapper is bypassed
+               self:configTile{operation = 'MAPPING',
+                               address = o,
+                               bypass = true,
+                               inputs = {[1] = {source = 'north'}},
+                               outputs = {[1] = {dest = nconvs+o}}}
+            end
+         end
+
+         -- config outputs to write results, inputs to read
+         for o = 1,sim_convs do
+            local i = o
+            self:configPort{index = nconvs+o, action = 'write', data = outputs[cur_o+o]}
+            self:configPort{index = i, action = 'fetch+read', data = inputs[cur_i+i]}
+         end
+
+         -- synchronize write ports
+         for o = 1,sim_convs do
+            self:configPort{index = nconvs+o, action = 'sync+close'}
+         end
+
+         -- and close inptut ports
+         for i = 1,sim_convs do
+            self:configPort{index = i, action = 'close'}
+         end
+
+         -- next set of outputs/kernels
+         cur_i = cur_i + sim_convs
+         cur_o = cur_o + sim_convs
+         cur_k = cur_k + sim_convs
+
+         -- deactivate all tiles
+         for o = 1,sim_convs do
+            self:configTile{operation = 'CONV2D', address = o, activate = false}
+            self:configTile{operation = 'MAPPING', address = o, activate = false}
+            self:configTile{operation = 'ADD', address = o, activate = false}
+         end
+         self:endProcess()
+
+      end
+
+   -- unknown combination of kernels/inputs/outputs
    else
       error('<CoreUser:convolveBankAndMap> the number of kernels/inputs/outputs is inconsistent')
    end
@@ -433,16 +521,6 @@ function CoreUser:convolveAndAcc(input, kernel, inputacc, output, opts)
                       activate = true}
 
       -- config tile #1 for mapper
-      -- local even
---       local odd
---       if (mapping.even == 1) or (mapping.even == true) then
--- 	 even = 1
---       else even = 0
---       end
---       if (mapping.odd == 1) or(mapping.odd == true) then
--- 	 odd = 1
---       else odd = 0
---       end
       self:configTile{operation = 'MAPPING',
                       address = 1,
                       config = {mode = {even=mapping.even, 
@@ -515,16 +593,6 @@ function CoreUser:subsample(input, kernel, output, opts)
                       activate = true}
 
       -- config tile #1 for mapper
-      -- local even
---       local odd
---       if (mapping.even == 1) or (mapping.even == true) then
--- 	 even = 1
---       else even = 0
---       end
---       if (mapping.odd == 1) or(mapping.odd == true) then
--- 	 odd = 1
---       else odd = 0
---       end
       self:configTile{operation = 'MAPPING',
                       address = 1,
                       config = {mode = {even=mapping.even, 
@@ -579,19 +647,6 @@ function CoreUser:mapping(input, output, coefs)
    if (self.msg_level ~= 'none') then
       self:message('exec.mapping.with.'..input.orig_h..'x'..input.orig_w..'.image')
    end
-  
-   
-   -- local even
---    local odd
---    if (coefs.even == 1) or (coefs.even == true) then
---       even = 1
---    else even = 0
---    end
---    if (coefs.odd == 1) or(coefs.odd == true) then
---       odd = 1
---    else odd = 0
---    end
-  
    
    -- config tile #1 for mapper
    self:configTile{operation = 'MAPPING',
@@ -650,13 +705,7 @@ function CoreUser:localNormalizeMean(input, kernel, output)
       error('<CoreUser:localNormalizeMean> input and output should be the same size')
    end
 
-   -- local max_kernel = kernel.data:max()
-
---    kernel.data:mul(2):div(max_kernel)
-    
-   --print(kernel.data)
-   
-    if not kernel.zero_mean then
+   if not kernel.zero_mean then
       -- (0) normalize kernel, and compute 1-ker
       local meanRemover = kernel.data
       meanRemover:div(meanRemover:sum())
@@ -671,34 +720,11 @@ function CoreUser:localNormalizeMean(input, kernel, output)
       kernel.zero_mean = true
    end
 
-   --print('kernel in zero mean, before convolution:')
-   --print(kernel.data)
-
-
    -- (2) remove mean == convolution
    self:convolBank({input}, {kernel}, {output})
-
-    -- generate coefs for scaler
-   -- local xN = function (x) 
---                  return x * (max_kernel/2)
---               end
---    local xN_coefs = math.approx{mapping=xN, min=num.min, max=num.max,
--- 				nbSegments=grid.mapper_segs, Q=num.frac_,
--- 				verbose=true}
-   
---    self:mapping(output,output, xN_coefs)
-
 end
 
 function CoreUser:localNormalizeStd(input, kernel, output, threshold)
-   -- print('in CoreUser:localNormalizeStd: kernel.data:')
---    print(kernel.data)
-   
---    local max_kernel = kernel.data:max()
-
---    kernel.data:mul(2):div(max_kernel)
---    print(kernel.data)
-
    if (self.msg_level ~= 'none') then
       self:message('exec.normalization.with.'..input.orig_h..'x'..input.orig_w..'.image')
    end
@@ -708,7 +734,7 @@ function CoreUser:localNormalizeStd(input, kernel, output, threshold)
    end
 
    if not kernel.one_mean then
---       -- (0) make sure kernel given is zero-mean and have perfect 1 mean after quantization
+      -- (0) make sure kernel given is zero-mean and have perfect 1 mean after quantization
       local average = kernel.data
       average:div(average:sum())
       average:mul(num.one):add(0.5):floor():div(num.one)
@@ -735,18 +761,13 @@ function CoreUser:localNormalizeStd(input, kernel, output, threshold)
       self.sqrtCoefs = math.approx{mapping=mapping, min=0, max=num.max,
 				   nbSegments=grid.mapper_segs, Q=num.frac_,
 				   epsilon = 19.7/256, error_type = 0,name='Sqrt_th'}
-      end
+   end
    
-   --local path = '/home/polina/Desktop/Dataflow_project/software/ext-xlearn/packages/NeuFlow/segments/'
-   --self.sqrtCoefs = read_coefs(path..'Sqrt_th')
-
    -- (3) sqrt(sum of squares) == square > convolution > mapping
    self:square(input, self.mem.buff[buffer])
    self:convolBank({self.mem.buff[buffer]}, {kernel}, {output}, self.sqrtCoefs)
 
-   --self:mapping(output,output, self.sqrtCoefs)
-
---    -- (4) divide
+   -- (4) divide
    self:divide(input, output, output)
 end
 

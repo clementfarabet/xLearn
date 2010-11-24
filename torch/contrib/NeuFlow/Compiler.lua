@@ -98,8 +98,7 @@ local layers_table = {
    -- Non Linear mappings (add software)
    ["nn.AbsModule"] = 
       function(net_compiler, module, inputs) 
-         print(message.WARNING_IMPLEMENTED, module)
-         return inputs
+         return net_compiler:Mapping(module,inputs,'Abs')
       end,
 
    ["nn.Sqrt"] = 
@@ -475,7 +474,11 @@ function Compiler:SpatialConvolution(conv_module, inputs, mapping)
       -- allocate output
       local item = self.core.mem.buff[inputs[1]]
       local output_width = math.floor( (item.orig_w - conv_module.kW)/conv_module.dW + 1 )
-      local output_height = math.floor( (item.orig_h - conv_module.kH)/conv_module.dH + 1 )
+      local output_height = (item.orig_h - conv_module.kH)/conv_module.dH + 1
+      if output_height ~= math.floor(output_height) then
+         error('# ERROR <Compiler> : inconsistent subsampling ratios in_h=' .. item.orig_h .. ', sub_h=' .. 
+               conv_module.kH .. ', out_h=' .. output_height)
+      end
       local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, new_layer)
       outputs[o] = id_output
       new_layer = false
@@ -540,27 +543,76 @@ function Compiler:SpatialConvolutionTable(conv_module, inputs, mapping)
       coefs = self:getCoefs(mapping)
    end
 
-   -- parse connex table, and identidy output reuse
+   -- parse connex table, and identidy output reuse / one2one connex
    -- if outputs are used more than once, then they'll be reused
    local output_reuse = false
-   for i = 1,conv_module.connTable:size(1) do
-      local current = conv_module.connTable[i][2]
-      for j = 1,conv_module.connTable:size(1) do
-         if j ~= i and current == conv_module.connTable[j][2] then
-            output_reuse = true
-            break
+   local one_to_one = false
+   local diff = (conv_module.connTable:select(2,1)-conv_module.connTable:select(2,2)):abs():max()
+   if diff == 0 then
+      one_to_one = true
+   else
+      for i = 1,conv_module.connTable:size(1) do
+         local current = conv_module.connTable[i][2]
+         for j = 1,conv_module.connTable:size(1) do
+            if j ~= i and current == conv_module.connTable[j][2] then
+               output_reuse = true
+               break
+            end
          end
+         if output_reuse then break end
       end
-      if output_reuse then break end
    end
 
-   -- depending on output/input reuse:
-   if output_reuse then
+   -- depending on output/input reuse and one2one connex:
+   if one_to_one then
+      local input_list = {}
+      local kernel_list = {}
+      local output_list = {}
+
       for o = 1,conv_module.nOutputPlane do
          -- allocate output
          local item = self.core.mem.buff[inputs[1]]
          local output_width = math.floor( (item.orig_w - conv_module.kW)/conv_module.dW + 1 )
-         local output_height = math.floor( (item.orig_h - conv_module.kH)/conv_module.dH + 1 )
+         local output_height = (item.orig_h - conv_module.kH)/conv_module.dH + 1
+         if output_height ~= math.floor(output_height) then
+            error('# ERROR <Compiler> : inconsistent subsampling ratios in_h=' .. item.orig_h .. ', sub_h=' .. 
+                  conv_module.kH .. ', out_h=' .. output_height)
+         end
+         local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, new_layer)
+         outputs[o] = id_output
+
+         -- allocate kernel + bias
+         local kernel = conv_module.weight:select(3, current_op)
+         local bias = conv_module.bias:narrow(1,o,1)
+         local id_kernel = self.core.mem:allocKernel(conv_module.kH, conv_module.kW, 
+                                                     kernel, bias)
+
+         -- collect connections
+         table.insert(input_list, self.core.mem.buff[inputs[o]])
+         table.insert(output_list, self.core.mem.buff[outputs[o]])
+         table.insert(kernel_list, self.core.mem.raw_data[id_kernel])
+
+         -- for info, update the number of ops
+         self.ops = self.ops + output_width*output_height*conv_module.kW*conv_module.kH*2
+
+         -- next connex
+         current_op = current_op + 1
+         new_layer = false
+      end
+
+      -- compute output
+      self.core:convolBank(input_list, kernel_list, output_list, coefs)
+
+   elseif output_reuse then
+      for o = 1,conv_module.nOutputPlane do
+         -- allocate output
+         local item = self.core.mem.buff[inputs[1]]
+         local output_width = math.floor( (item.orig_w - conv_module.kW)/conv_module.dW + 1 )
+         local output_height = (item.orig_h - conv_module.kH)/conv_module.dH + 1
+         if output_height ~= math.floor(output_height) then
+            error('# ERROR <Compiler> : inconsistent subsampling ratios in_h=' .. item.orig_h .. ', sub_h=' .. 
+                  conv_module.kH .. ', out_h=' .. output_height)
+         end
          local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, new_layer)
          outputs[o] = id_output
          new_layer = false
@@ -612,7 +664,11 @@ function Compiler:SpatialConvolutionTable(conv_module, inputs, mapping)
                -- allocate output
                local item = self.core.mem.buff[inputs[1]]
                local output_width = math.floor( (item.orig_w - conv_module.kW)/conv_module.dW + 1 )
-               local output_height = math.floor( (item.orig_h - conv_module.kH)/conv_module.dH + 1 )
+               local output_height = (item.orig_h - conv_module.kH)/conv_module.dH + 1
+               if output_height ~= math.floor(output_height) then
+                  error('# ERROR <Compiler> : inconsistent subsampling ratios in_h=' .. item.orig_h .. ', sub_h=' .. 
+                        conv_module.kH .. ', out_h=' .. output_height)
+               end
                local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, 
                                                               new_layer)
                outputs[o] = id_output
@@ -677,37 +733,44 @@ function Compiler:SpatialSubSampling(sub_module, inputs, mapping)
       coefs = self:getCoefs(mapping)
    end
 
-   for i = 1,sub_module.nInputPlane do
-      local kernel = torch.Tensor(sub_module.kW, sub_module.kH):fill(sub_module.weight[i])
-      local bias = sub_module.bias:narrow(1,i,1)
-      self.logfile:write(string.format("ker #%d:\n", i))
-      self.logfile:write(tostring(kernel))
-      local id_kernel = self.core.mem:allocKernel(sub_module.kH, sub_module.kW, kernel, bias)
-      local output_width = (self.core.mem.buff[inputs[i]].orig_w - sub_module.kW)/sub_module.dW + 1
-      local output_height = (self.core.mem.buff[inputs[i]].orig_h - sub_module.kH)/sub_module.dH + 1
-      local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, new_layer)
-      if mapping then
-         self.core:subsampleWithBiasAndMap(self.core.mem.buff[inputs[i]], 
-                                           self.core.mem.raw_data[id_kernel], 
-                                           self.core.mem.buff[id_output], coefs)
-         -- mapping:
-         self.ops = self.ops + output_width*output_height*16
-      else
-         self.core:subsampleWithBias(self.core.mem.buff[inputs[i]], 
-                                     self.core.mem.raw_data[id_kernel], 
-                                     self.core.mem.buff[id_output])
-      end
-      -- optional time
-      if (self.msg_level == 'detailled') then
-         self.core:startProcess()
-         self.core:messagebody('.')
-         self.core:endProcess()
-      end
-      outputs[i] = id_output
-      new_layer = false
+   -- NEW
+   do
+      local input_list = {}
+      local kernel_list = {}
+      local output_list = {}
 
-      -- for info, update the number of ops
-      self.ops = self.ops + output_width*output_height*sub_module.kH*sub_module.kW*2
+      for o = 1,sub_module.nInputPlane do
+         -- allocate output
+         local item = self.core.mem.buff[inputs[1]]
+         local output_width = math.floor( (self.core.mem.buff[inputs[o]].orig_w-sub_module.kW)/sub_module.dW + 1)
+         local output_height = (self.core.mem.buff[inputs[o]].orig_h-sub_module.kH)/sub_module.dH + 1
+         if output_height ~= math.floor(output_height) then
+            error('# ERROR <Compiler> : inconsistent subsampling ratios in_h=' .. item.orig_h .. ', sub_h=' .. 
+               conv_module.kH .. ', out_h=' .. output_height)
+         end
+         local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, new_layer)
+         outputs[o] = id_output
+
+         -- allocate kernel + bias
+         local kernel = torch.Tensor(sub_module.kW, sub_module.kH):fill(sub_module.weight[o])
+         local bias = sub_module.bias:narrow(1,o,1)
+         local id_kernel = self.core.mem:allocKernel(sub_module.kH, sub_module.kW, 
+                                                     kernel, bias)
+
+         -- collect connections
+         table.insert(input_list, self.core.mem.buff[inputs[o]])
+         table.insert(output_list, self.core.mem.buff[outputs[o]])
+         table.insert(kernel_list, self.core.mem.raw_data[id_kernel])
+
+         -- for info, update the number of ops
+         self.ops = self.ops + output_width*output_height*sub_module.kW*sub_module.kH*2
+
+         -- next connex
+         new_layer = false
+      end
+
+      -- compute output
+      self.core:convolBank(input_list, kernel_list, output_list, coefs)
    end
 
    -- timing info
@@ -741,8 +804,6 @@ function Compiler:LocalNorm(sub_module, inputs)
    local kernel_h = kernel:size(2)
    local id_kernel_mean = self.core.mem:allocRawData(kernel_h, kernel_w, kernel)
    local id_kernel_std = self.core.mem:allocRawData(kernel_h, kernel_w, kernel)
-
-   --print('local norm w = ',  kernel_w, ', h = ', kernel_h)
 
    -- alloc one intermediate map (to hold zero-mean feature map)
    local zerom_w = self.core.mem.buff[inputs[1]].orig_w
@@ -860,7 +921,6 @@ end
 function Compiler:getCoefs(mapping)
    local type = mapping
       
-   --print('mapping: '..type)
    -- generate coefs for this non-linear mapping
    if type == 'Tanh' then
       coefs=math.approx{mapping=math.tanh, min=-5, max=5, odd=true,
@@ -900,9 +960,6 @@ function Compiler:getCoefs(mapping)
       error('# ERROR <Compiler> : unknown mapping')
    end
    
-   -- coefs = read_coefs(paths.concat(paths.install_lua_path, 'NeuFlow/',type))
---    print('even = ', coefs.even)
---    print('odd = ', coefs.odd)
    return coefs
 end
 

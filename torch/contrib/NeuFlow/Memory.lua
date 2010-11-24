@@ -208,7 +208,9 @@ function Memory:allocImageData(h_, w_, data_)
       self.data_offset_x = 0
       self.data_offset_y = self.data_offset_y + h_
    end
-   self.data[self.datap] = {x = self.data_offset_x, y = self.data_offset_y, w = w_, h = h_, 
+   self.data[self.datap] = {x = self.data_offset_x, y = self.data_offset_y, 
+                            w = w_, h = h_, 
+                            orig_w = w_, orig_h = h_, 
 			    data = data_}
    -- log the information
    self.logfile:write(string.format("image id = %d, x = %d, y = %d, w = %d, h = %d, data = \n",

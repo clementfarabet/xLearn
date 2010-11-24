@@ -251,9 +251,7 @@ end
 
 -- The current function to find segments for 
 -- linear approximation.
-function math.approx2(args)
-   print('in approx2')
-   
+function math.approx2(args)   
    -- generating points
    local step = 1/256
    local start_range = args.min or 0
@@ -566,7 +564,6 @@ end
 -- This function is used if we want segments to 
 -- use linear approximation - mapping, on a linear function already
 function math.approx_line(args)
-   print('in approx_line')
    local num_of_segs = args.nbSegments or 8
    local even = args.even or false
    local odd = args.odd or false
@@ -634,13 +631,13 @@ function math.approx(args)
    local filepath = coefpath..'/'..filename
    -- if (file_exists(paths.concat(paths.install_lua_path, 'NeuFlow/',filename))) then
    if (file_exists(filepath)) then 
-      print('Reading from file segments for: ', filename)
+      print('# reading from file segments for: ', filename)
       --coefs = read_coefs(paths.concat(paths.install_lua_path, 'NeuFlow/',filename))
       coefs = read_coefs(filepath)
    else
-      print('There are no segments for requested mapping, generating segments for: ', filename)
+      print('# there are no segments for requested mapping, generating segments for: ', filename)
       coefs = math.approx2(args)
-      print('Now writing segments to file: ', filename)
+      print('# caching segments to file: ', filename)
       --write_coefs(coefs, paths.concat(paths.install_lua_path, 'NeuFlow/',filename))
       write_coefs(coefs, filepath)
       --print('Segments have been written. Now update_install and run again, exiting...')

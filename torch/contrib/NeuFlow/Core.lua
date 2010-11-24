@@ -786,7 +786,7 @@ function Core:configureStreamer(offset, length, stride, ports)
    -- set timeouts
    local timeouts = {1,64,1,1}
    for i = 5,(#ports+1) do
-      timeouts[i] = 24
+      timeouts[i] = 50
    end
    self:setPortTimeouts(timeouts)
 end
