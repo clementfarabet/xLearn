@@ -2,8 +2,7 @@
 ================================================================================
 What's in this package ??
 
-Torch 5     require 'torch'
-            Torch5 provides a Matlab-like environment for state-of-the-art 
+Torch 5     Torch5 provides a Matlab-like environment for state-of-the-art 
             machine learning algorithms. It is easy to use and provides a 
             very efficient implementation, thanks to an easy and fast 
             scripting language (Lua) and a underlying C implementation.
@@ -20,19 +19,19 @@ Torch 5     require 'torch'
             Torch is licensed under a BSD license:
             http://torch5.sourceforge.net/manual/License.html
 
-xLearn      require 'XLearn'
-            xLearn is an extension library for torch. It provides dozens 
+xLearn      xLearn is an extension library for torch. It provides dozens 
             of tools/modules for vision, image processing, and machine 
             learning for vision.
 
-luaFlow     require 'luaflow'
-[beta]      luaFlow is a unified flow-graph description environment
-            for vision / image-processing types of applications. One of its
+luaFlow     luaFlow is a unified flow-graph description environment for
+[beta]      vision / image-processing types of applications. One of its
             primary objectives is to abstract computing platforms, by 
             providing a unified, high-level description flow.
 
-neuFlow     require 'NeuFlow'
-            neuFlow is the compiler toolkit for the neuFlow processor, 
+xFlow       a serializing language for luaFlow, that allows algorithms to
+[beta]      be imported/exported from/to other software frameworks
+
+neuFlow     neuFlow is the compiler toolkit for the neuFlow processor, 
             developped at New York University / Yale University.
             The neuFlow processor is dataflow computer optimized for
             vision and bio-inspired models of vision. 
@@ -43,39 +42,6 @@ neuFlow     require 'NeuFlow'
             It is quite important to have access to a neuFlow device to 
             be able to experiment with it: for more info/support, to get
             a neuFlow-enabled board, please contact clement.farabet@gmail.com
-
-opencv      require 'opencv'
-[beta]      a couple of OpenCV bindings in Lua/Torch5.
-
-thread      require 'thread'
-            The distributed Lua source has been patched with
-            LuaThread, which allows threads to be created, sharing a
-            single Lua stack. For some reason, the LuaThread website
-            doesn't seem to exist anymore.
-
-debugger    require 'debugger'
-            This activates a debugger for Lua, and sets a global
-            _DEBUG_ flag. The snippet: if _DEBUG_ then pause() end
-            can be used to insert breakpoints.
-            (taken from https://github.com/norman/lua-devtools)
-
-LuaJIT      The entire project is compatible with LuaJIT, which
-[beta]      provides much improved performance (typically from 2x to
-            20x over the standard Lua 5.1 interpreter).
-            The entire package provided can build against LuaJIT, and
-            LuaJIT is redistributed here for simplicity.
-            Just do: make USE_LUAJIT=1 install
-            (that will install LuaJIT, plus build Torch5+xLearn
-            against it).
-            Note: using LuaJIT deactivates the 'thread' library.
-
-
-================================================================================
-Disclaimer/Note
-
-Everything provided here is beta, lots of things are
-experimental, we release it mostly for people who want to work with
-us.
 
 
 ================================================================================
@@ -96,19 +62,13 @@ INSTALL
 
 (1-MACOS)
     install dependencies (readline, cmake, QT4)
-    $ sudo port install cmake readline-5 cmake qt4-mac-devel
+    $ sudo port install readline-5 cmake qt4-mac-devel
 
     you might want to use a prebuilt version of QT4, to avoid the 2 hour
     build time... (I still don't understand
     why MacPort relies on sources rather than binaries...)
     I'm keeping a working version here (installs in 5mins):
     http://data.clement.farabet.net/qt/qt-mac-cocoa-opensource-4.5.3.dmg
-
-    optionally, install libcamiface to interface to your webcam, 
-    simply run:
-    $ ./install-camera-macos
-    that compiles libcamiface, and installs a
-    little program called frame_grabber-*** that acts as a frame server.
 
 (2-COMMON) 
     once the dependencies are installed, just run:
