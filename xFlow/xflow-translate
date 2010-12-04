@@ -1,0 +1,103 @@
+#!/bin/bash
+######################################################################
+# Copyright (c) 2010 Clement Farabet
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+# 
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+######################################################################
+# description:
+#     xflow-translate: a translator for the xFlow language
+#
+# history: 
+#     November 27, 2010, 9:46PM - creation
+######################################################################
+
+# Should give an arg
+if [ $# == 0 ]
+then
+    echo "syntax:"
+    echo $0 " src [language.m4] [dest]"
+    echo ""
+    echo "src:         input file (an xFlow program)"
+    echo "language.m4: language definition file (M4 macros)"
+    echo "dest:        output file"
+    exit
+fi
+
+# load library, depending on target language
+if [ $2 ]
+then
+    if [ -f $2 ]
+    then
+        M4=$2
+    fi
+    if [ -z $M4 ]
+    then
+        echo "# language file couldn't be found, please provide a valid M4 definition file"
+        exit
+    fi
+else
+    M4=
+fi
+
+# output file
+if [ $3 ]
+then
+    OUT=$3
+fi
+
+# temp files
+TMP=.tmp.xfl
+TMPOUT=.tmp.dest
+
+# convert xFlow into a functional pseudo-code, to be easily processed
+# by M4... that involves getting rid of non-standard characters, and
+# transforming any linear statement into a functional call
+sed -e 's|#|COMMENT|g' \
+    -e 's|[ 	]*:=[ 	]*| NEW |g' \
+    -e 's|[ 	]*<=[ 	]*| FROM |g' \
+    -e 's|[ 	]*=>[ 	]*| TO |g' \
+    -e 's|<\([a-z]*\)>|_\1_|g' \
+    -e 's|[ 	]*,[ 	]*| SEP |g' \
+    -e 's|[ 	]*{[ 	]*| SCOPE_OPEN |g' \
+    -e 's|}[ 	]*| SCOPE_CLOSE) |g' \
+    -e 's|[ 	]*<[ 	]*\[\(.*\)\]| < LIST(\1)|g' \
+    -e 's|\([_a-zA-Z0-9]*\)[ 	]*=[ 	]*\(.*\)|DSYMB(\1,\2)|g' \
+    -e 's|input[ 	]*\(.*\)|IN\1|g' \
+    -e 's|output[ 	]*\(.*\)|OUT\1|g' \
+    -e 's|\([_a-zA-Z0-9]*\)[ 	]*<[ 	]*\(LIST(.*)\)|INIT(\1,\2)|g' \
+    -e 's|[&]\([_a-zA-Z0-9]*\)[ 	]*|NODE(\1)|g' \
+    -e 's|\(NODE(.*\))[ 	]*NEW[ 	]*|D\1,|g' \
+    -e 's|\(NODE(.*\)\()(\)|\1,|g' \
+    -e 's|\([_a-zA-Z0-9]*\)\[\([:0-9]*\)\]|SELECT(\1,\2)|g' \
+    $1 > ${TMP}
+
+# run M4 to translate the xFlow into dest language
+m4 ${M4} ${TMP} | m4 --define COMMA=, > ${TMPOUT}
+
+if [ ${OUT} ]
+then
+    echo '# saving to' ${OUT}
+    mv ${TMPOUT} ${OUT}
+else
+    cat ${TMPOUT}
+fi
+
+# cleanup
+rm -f ${TMPOUT} ${TMP}

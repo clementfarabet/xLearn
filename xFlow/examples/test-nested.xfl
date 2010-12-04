@@ -1,0 +1,29 @@
+# load libs
+require(libmath)
+require(libneural)
+require(libstd)
+
+# set version
+version(0.3)
+
+# set I/Os
+input in1 = array(3,_,_)
+output out1 = array(3,_,_)
+temp = array(3,_,_)
+
+# declare node
+&sigmoid := {
+    input in = array()
+    output out = array()
+    &math_nn(x <= in, sigmoid<x> => out)
+}
+
+# use node
+node1 = &sigmoid(in <= in1, out => temp)
+
+# apply a scaling factor to each map
+ratios = array(3,1,1)
+node2 = &math(x <= temp, y <= ratios, mul<xy> => out1)
+
+# init some data nodes
+ratios < [0.4, 0.9, -1]

@@ -1,0 +1,30 @@
+############################################################
+# xFlow math library: defines built-in compute-nodes for
+#                     most basic math on tensors
+#
+# note: * scalar() is an exact equivalent of array(1)
+#       * array() is an n-dim array of unspecified rank
+#       * xxx := {} defines a new type node
+#       * xxx(...) implements/recalls an existing node
+#
+
+version(0.3)
+
+############################################################
+# flow control elements
+#
+# note: * for now it provides two versions of x, 
+#         a replica (copy<x>) and a delayed/registered version
+#         of x (delay<x>). the former is implemented in the
+#         backend by a simple copy, while the later is a 
+#         proper cycle delay, which can be seen as a register
+#         in a circuit.
+#
+&flow := {
+          # inputs
+          input x = array()
+
+          # outputs
+          output copy<x> = array()
+          output delay<x> = array()
+         }

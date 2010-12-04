@@ -9,20 +9,14 @@ flow = require 'luaFlow'
 cam = flow.Node.ImageSource{output  = flow.Array(3,83,83),
                             type    = 'camera'}
 
-yuv = flow.Node.ImageTransform{input   = cam.output,
-                               type    = 'rgb2y'}
-
-convnet = flow.Node.load{input   = yuv.output,
+convnet = flow.Node.load{input   = cam.output,
                          version = 0.2,
-                         file    = 'networks/iccv-convnet.xfl'}
+                         file    = 'networks/xflow-first-example.xfl'}
 
-disp_in = flow.Node.Display{input  = yuv.output,
-                            zoom   = 1,
-                            min    = 0, 
-                            max    = 1}
+disp = flow.Node.Display{input  = convnet.output, zoom   = 2}
 
 -- connect nodes together
-network = flow.Node.gather(disp_in, cam, yuv, convnet)
+network = flow.Node.gather(disp, cam, convnet)
 
 -- print
 print(network)

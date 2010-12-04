@@ -1,0 +1,52 @@
+# load libs
+require(libmath)
+require(libneural)
+require(libstd)
+
+# set version
+version(0.3)
+
+# set I/Os
+input in1 = array(3,_,_)
+output out1 = array(3,_,_)
+temp = array(3,_,_)
+temp1 = array(1,_,_)
+
+# declare node
+&transfo := {
+             # declare I/Os
+             static SOMEPARAM = boolean(false)
+             input in1 = array()
+             input in2 = array()
+             output out = array()
+             output otherout = array()
+
+             # some internal data
+             internal = array()
+
+             # declare nested node
+             &specialsigmoid := {
+                                 input in = array()
+                                 input out = array()
+                                 temp = array()
+                                 &math_nn(x <= in, sigmoid<x> => temp)
+                                 &math_nn(x <= temp, y <= scalar(0.4), mul<xy> => out)
+                                }
+
+             # the actual computation nodes
+             &math(x <= in1, y <= in2, mul<xy> => out)
+             &specialsigmoid(x <= in1, sigmoid<x> => otherout)
+            }
+
+# instantiate node:
+forloop(i, 0, 2, 
+   node1 = &transfo(in1 <= in1[i], in2 <= temp1, out => temp[i])
+)
+node3 = &transfo(in1 <= in1[1], otherout => temp1)
+
+# apply a scaling factor to each map
+ratios = array(3,1,1)
+node2 = &math(x <= temp, y <= ratios, mul<xy> => out1)
+
+# init some data nodes
+ratios < [0.4, 0.9, -1]

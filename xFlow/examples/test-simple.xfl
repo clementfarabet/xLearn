@@ -1,0 +1,15 @@
+# load libs
+require(libmath)
+require(libstd)
+
+# set version
+version(0.3)
+
+# set I/Os
+input in1 = array(3,_,_)
+output out1 = array()
+temp = array()
+
+# apply a scaling factor to each map
+node4 = &flow(x <= in1, copy<x> => temp)
+node2 = &math(x <= temp, inv<x> => out1)

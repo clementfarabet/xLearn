@@ -1,0 +1,132 @@
+############################################################
+# xFlow math library: defines built-in compute-nodes for
+#                     most basic math on tensors
+#
+# note: * scalar() is an exact equivalent of array(1)
+#       * array() is an n-dim array of unspecified rank
+#       * xxx := {} defines a new type node
+#       * xxx(...) implements/recalls an existing node
+#
+
+version(0.3)
+
+############################################################
+# known constants
+#
+pi = scalar(3.1415926535897931)
+phi = scalar(1.6180339887498948)
+
+
+############################################################
+# basic math operators
+#
+# note: * these nodes all generate arrays of the size of
+#         the largest input array
+#       * if all input arrays are of the same size, the 
+#         result is trivial
+#       * if one input array is scalar, or any array that
+#         is smaller than the others, it is replicated over
+#         the dimensions of the other.
+#
+#       * Ex: x1 = array(3,3)
+#             y1 = array(1)
+#             res1 = array()
+#             node1 = math(x <= x1, y <= y1, x+y => res1)
+#
+#             # res1 is automatically resized to be an array(3,3)
+#             # and y1[1] is added to each term of x1
+#
+#       * Ex: x2 = array(3,3)
+#             y2 = array(3,1)
+#             res2 = array()
+#             node2 = math(x <= x2, y <= y2, x+y => re2)
+#
+#             # res2 is automatically resized to be an array(3,3)
+#             # but now y2[i][0] is added to each term of x[i]
+#
+&math := { 
+          # inputs
+          input x = array()
+          input y = array()
+          input k = scalar()
+
+          # outputs
+          output minus<x> = array() 
+          output inv<x> = array() 
+          output add<xy> = array() 
+          output mul<xy> = array() 
+          output div<xy> = array() 
+          output sub<xy> = array() 
+          output mulacc<xy> = array() 
+          output muladd<xyk> = array() 
+          output log<x> = array() 
+          output exp<x> = array() 
+          output cos<x> = array() 
+          output sin<x> = array() 
+          output tan<x> = array() 
+          output acos<x> = array() 
+          output asin<x> = array() 
+          output atan<x> = array() 
+          output cosh<x> = array() 
+          output sinh<x> = array() 
+          output tanh<x> = array() 
+          output square<2> = array() 
+          output power<xk> = array() 
+          output sqrt<x> = array() 
+          output abs<x> = array() 
+          output ceil<x> = array() 
+          output floor<x> = array() 
+          output sign<x> = array()
+         }
+          
+
+############################################################
+# generative functions (no input)
+#
+# note: * these nodes return n-dim arrays
+#
+#       * Ex: # this will return an array(3,4,4), filled with zeros:
+#             node3 = generate(size <= [3 4 4], zeros => some-matrix)
+#
+&generate := { 
+              # inputs
+              input size = list()
+              input a = scalar()
+              input b = scalar()
+              input c = scalar()
+
+              # outputs
+              output eye = array()
+              output zeros = array()
+              output ones = array()
+              output fill = array()
+              output range = array()
+             }
+
+
+############################################################
+# reduce operators
+#
+# note: * all these operators shrink arrays along a given 
+#         dimension (dim)
+#       * if dim is not driven (connected), the reduce is
+#         performed across the entire array, yielding a scalar()
+#       * reminder: a scalar is an array(1)
+#
+&reduce := {
+            # inputs
+            input x = array()
+            input y = array()
+            input p = scalar()
+            input dim = scalar()
+
+            # outputs
+            output p_norm<x> = scalar()
+            output p_dist<xy> = scalar()
+            output var<x> = scalar()
+            output std<x> = scalar()
+            output mean<x> = scalar()
+            output sum<x> = scalar()
+            output min<x> = scalar()
+            output max<x> = scalar()
+           }

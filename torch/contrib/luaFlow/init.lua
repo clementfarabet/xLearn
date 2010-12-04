@@ -54,6 +54,25 @@ if not luaFlowLoaded then
                             table.insert(child.PID, parent.ID)
                          end
 
+   -- require can be used to include libraries (for now, this is
+   -- essentially unused, but provided for future compatibility)
+   luaFlow.require = function (lib)
+                        if lib == 'libstd' then
+                        elseif lib == 'libmath' then
+                        elseif lib == 'libneural' then
+                        else
+                           error('<luaFlow.require> unknown library: ' .. lib)
+                        end
+                     end
+
+   -- set version (this is also not really used, but provided for the future)
+   luaFlow.ver = 0.3
+   luaFlow.version = function (ver)
+                        if ver ~= luaFlow.ver then 
+                           error('<luaFlow.version> version ' .. ver .. ' not supported')
+                        end
+                     end
+
    -- include sudmodules
    torch.include('luaFlow', 'Array.lua')
    torch.include('luaFlow', 'Node.lua')

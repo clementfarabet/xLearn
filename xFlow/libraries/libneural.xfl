@@ -1,0 +1,136 @@
+############################################################
+# xFlow neural library: defines built-in compute-nodes for
+#                       most typical neural networks
+#
+# note: * scalar() is an exact equivalent of array(1)
+#       * array() is an n-dim array of unspecified rank
+#       * xxx := {} defines a new type node
+#       * xxx(...) implements/recalls an existing node
+#
+
+version(0.3)
+
+############################################################
+# linear transformations
+#
+# for all the following compute-nodes, an n-dim array is
+# considered as a collection of [n-1]-dim arrays.
+# the outer dimension (leftmost) is always used to index
+# the collection.
+#
+# from the backend's perspective, the n-dim array could be
+# replaced by a list of [n-1]-dim arrays.
+#
+# Ex: a collection of cubic data structures (e.g. video
+# samples) would be represented as a 4-dim tensor
+# (tensor (dim a b c d)), 'a' being used as the sample 
+# indexer.
+#
+&linear_combination := { 
+                        # inputs
+                        input in = array()
+                        input bias = array(_)
+                        input weight = array(_,_)
+
+                        # outputs
+                        output out = array()
+                       }
+
+&linear_filter_bank := {
+                        # constants
+                        static DIM = scalar(2)
+                        static MODE = string("valid")
+
+                        # inputs
+                        input in = array()
+                        input bias = array(_)
+                        input weight = array()
+                        input connex = list(array(2))
+                        input stride = list()
+
+                        # outputs
+                        output out = array()
+                       }
+
+
+############################################################
+# non-linear/destructive transformations
+#
+&mean_normalization := {
+                        # constants
+                        static DIM = scalar(2)
+                        static MODE = string("valid")
+
+                        # inputs
+                        input in = array()
+                        input weight = array()
+                        
+                        # outputs
+                        output out = array()
+                       }
+
+&std_normalization := {
+                       # constants
+                       static DIM = scalar(2)
+                       static MODE = string("valid")
+
+                       # inputs
+                       input in = array()
+                       input weight = array()
+                       input threshold = scalar()
+                       input value = scalar()
+                        
+                       # outputs
+                       output out = array()
+                      }
+
+&max_pooling := {
+                 # constants
+                 static DIM = static(scalar(2)
+
+                 # inputs
+                 input in = array()
+                 input bias = array(_)
+                 input window = list()
+                 input stride = list()
+                        
+                 # outputs
+                 output out = array()
+                }
+
+
+&average_pooling := {
+                     # constants
+                     static DIM = scalar(2)
+
+                     # inputs
+                     input in = array()
+                     input bias = array(_)
+                     input window = list()
+                     input stride = list()
+
+                     # outputs
+                     output out = array()
+                    }
+
+
+############################################################
+# useful transfer functions for neural networks
+# thos nodes complete the standard math node
+#
+&math_nn := {
+             # inputs
+             input x = array()
+             input k = scalar()
+
+             # outputs
+             output sigmoid<x> = array()
+             output nn_sigmoid<x> = array()
+             output hard_tanh<x> = array()
+             output k_threshold<x> = array()
+             output k_threshold_symmetric<x> = array()
+             output soft_max<x> = array()
+             output soft_plus<x> = array()
+             output log_soft_max<x> = array()
+             output log_sigmoid<x> = array()
+            }

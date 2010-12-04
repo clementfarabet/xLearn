@@ -1,0 +1,64 @@
+# load libs
+require(libmath)
+require(libneural)
+require(libstd)
+
+# set version
+version(0.3)
+
+# set I/Os
+input in1 = array(1,_,_)
+
+# encoder
+&encoder := {
+    # declare I/Os
+    input in = array(1,_,_)
+    output out = array(32,_,_)
+
+    # internals
+    convol_out = array(32,_,_)
+
+    # a filter bank
+    &linear_filter_bank(DIM = 2,
+                        in = in,
+                        out = convol_out)
+    # a non-linear function
+    &math_nn(x = convol_out,
+             sigmoid<x> = out)
+}
+
+# decoder
+&decoder := {
+    # declare I/Os
+    input in = array(32,_,_)
+    output out = array(1,_,_)
+
+    # a filter bank
+    &linear_filter_bank(DIM = 2, 
+                        MODE = "full",
+                        in = in,
+                        out = out)
+}
+
+# instantiate encoder
+output encoder_out = array(32,_,_)
+encoder = &encoder(in = in1, out = encoder_out)
+
+# copy output
+output code = array(32,_,_)
+&flow(x = encoder_out, copy<x> = code)
+
+# instantiate decoder
+&decoder(in = code, out = decoder_out)
+
+# reconstruction gradient
+output recontruction_gradient = array(32,_,_)
+&math(x = decoder_out, y = in1, sub<xy> = recontruction_gradient)
+
+# sparseness gradient
+output sparseness_gradient = array(32,_,_)
+&math(x = code, sign<x> = sparseness_gradient)
+
+# predictive gradient
+output predictive_gradient = array(32,_,_)
+&math(x = encoder_out, y = code, sub<xy> = predictive_gradient)
