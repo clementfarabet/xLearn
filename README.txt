@@ -49,16 +49,10 @@ INSTALL
 
 (1-LINUX) 
     install dependencies (compilation tools, cmake, QT4):
-    $ sudo apt-get install gcc g++ cmake libqt4-core libqt4-dev libqt4-gui
-
-    recommended (better shell)
-    $ sudo apt-get install libreadline5-dev
+    $ sudo apt-get install binutils gcc g++ cmake libqt4-core libqt4-dev libqt4-gui libreadline5-dev libpcap-dev
 
     optionally, install OpenCV 2.1, to get access to your webcam:
     http://sourceforge.net/projects/opencvlibrary/files/opencv-unix/2.1/
-
-    optionally, install PCAP for the ethernet driver (neuFlow)
-    $ sudo apt-get install libpcap-dev
 
 (1-MACOS)
     install dependencies (readline, cmake, QT4)
