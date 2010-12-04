@@ -392,7 +392,7 @@ function CoreUser:convolBank(inputs, kernels, outputs, coefs)
    -- one kernel per input, this is a 1 to 1 layer
    elseif #inputs == #outputs and #inputs == #kernels then 
       -- compute all convolutions, by groups of [nconvs]
-      local nconvs = math.floor(grid.nb_ios/2)
+      local nconvs = math.min(math.floor(grid.nb_ios/2),nconvs)
       local nb_cycles = math.ceil(#outputs / nconvs)
       local last_cycle = nb_cycles*nconvs - #outputs
       local cur_k = 0
