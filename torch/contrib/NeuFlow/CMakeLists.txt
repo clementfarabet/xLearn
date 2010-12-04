@@ -2,7 +2,7 @@
 SET(src )
 
 
-FILE(GLOB MyCSources segments/*)
+FILE(GLOB MyCSources segments/coef*)
 
 SET(luasrc defines.lua
            tools.lua
