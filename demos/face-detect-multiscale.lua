@@ -1,3 +1,4 @@
+#!/usr/bin/env qlua
 ----------------------------------------------------------------------
 -- WHAT: executes a pretrained neural net on an image source.
 --       the image source must be provided on the command line.

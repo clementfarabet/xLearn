@@ -11,6 +11,8 @@ require 'NeuFlow'
 op = OptionParser('%prog [options]')
 op:add_option{'-s', '--source', action='store', dest='source', 
               help='image source, can be one of: camera | lena'}
+op:add_option{'-c', '--camera', action='store', dest='camidx', 
+              help='if source=camera, you can specify the camera index: /dev/videoIDX [default=0]'}
 options,args = op:parse_args()
 
 
@@ -81,7 +83,7 @@ end
 painter = qtwidget.newwindow(1200,700)
 
 -- camera and converter
-source = nn.ImageSource(options.source or 'camera')
+source = nn.ImageSource(options.source or 'camera', nil, options.camidx)
 rgb2y = nn.ImageTransform('rgb2y')
 
 -- displayers

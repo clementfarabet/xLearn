@@ -1,11 +1,11 @@
+#!/usr/bin/env qlua
+------------------------------------------------------------
 -- elab faces+attention demo
 -- Faye Zhao <faye.zhao@yale.edu>, Ifigeneia Derekli <ifigeneia1989@gmail.com>
 -- with Eugenio Culurciello, Polina Akselrod
 
-
 require 'XLearn'
 require 'thread'
-require 'camiface'
 require 'os'
 local queue = require 'thread.queue'
 
@@ -265,6 +265,7 @@ local function detector(mutexInput, mutexResults)
 end
 
 -- display
+inpDisp = Displayer()
 local function displayer(mutexInput, mutexResults)
    -- get frame from camera, convert to Y
    camFrame1 = camera:forward()
@@ -285,8 +286,8 @@ local function displayer(mutexInput, mutexResults)
 
    -- disp cam image
    local zoom = 1/hslide
-   image.qtdisplay{tensor=camFrame1, painter=painter, raw=true,
-                   globalzoom=zoom, offset_x=0, offset_y=0}
+   inpDisp:show{tensor=camFrame1, painter=painter, min=0, max=1,
+                globalzoom=zoom, offset_x=0, offset_y=0}
 
 		
    -- disp FPS

@@ -1,3 +1,4 @@
+#!/usr/bin/env qlua
 ----------------------------------------------------------------------
 -- WHAT: executes a pretrained neural net on an image source.
 --       the image source must be provided on the command line.
@@ -9,6 +10,8 @@ require 'os'
 op = OptionParser('%prog -s SOURCE [options]')
 op:add_option{'-t', '--type', action='store', dest='type', 
               help='optional type, depends on the kind of source. for camera: opencv | camiface | v4linux'}
+op:add_option{'-c', '--camera', action='store', dest='camidx', 
+              help='if source=camera, you can specify the camera index: /dev/videoIDX [default=0]'}
 options,args = op:parse_args()
 
 -- setup QT gui
@@ -16,8 +19,7 @@ toolBox.useQT()
 painter = qtwidget.newwindow(800,600)
 
 -- video source
-if not options.type then options.type = 'camiface' end
-source = nn.ImageSource('camera', options.type)
+source = nn.ImageSource('camera', options.type, options.camidx)
 
 -- displayers to hold print buffers
 displayer_source = Displayer()

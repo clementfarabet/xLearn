@@ -31,9 +31,10 @@
 #include <linux/videodev2.h>
 
 // video buffers
-static int nbuffers = 8;
-static void *buffers[8];
-static int sizes[8];
+#define MAX_BUFFERS 8
+static int nbuffers = 1;
+static void *buffers[MAX_BUFFERS];
+static int sizes[MAX_BUFFERS];
 static int started = 0;
 static int fd;
 
@@ -76,7 +77,14 @@ static int l_grabFrame (lua_State *L) {
   THTensor * frame = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
 
   // device
-  char *device = "/dev/video0";
+  const char *device = "/dev/video0";
+  if (lua_isstring(L, 2)) device = lua_tostring(L, 2);
+
+  // nb of buffers
+  if (lua_isnumber(L, 3)) nbuffers = lua_tonumber(L, 3);
+
+  // grabbing speed
+  if (lua_isnumber(L, 4)) fps = lua_tonumber(L, 4);
 
   // get camera
   if(!started) {
@@ -176,8 +184,8 @@ static int l_grabFrame (lua_State *L) {
       }
     }
 
-    set_boolean_control(V4L2_CID_AUTOGAIN, 0);
-    set_boolean_control(V4L2_CID_AUTO_WHITE_BALANCE, 0);
+    set_boolean_control(V4L2_CID_AUTOGAIN, 1);
+    set_boolean_control(V4L2_CID_AUTO_WHITE_BALANCE, 1);
 
     // start capturing
     ret = 0;
@@ -220,16 +228,25 @@ static int l_grabFrame (lua_State *L) {
   src = (unsigned char *)(buffers[buf.index]);
   for (i=0; i < height1; i++) {
     for (j=0, k=0; j < width1; j++, k+=m1) {
+      double f,y,u,v;
       int j2;
       j2 = j<<1;
-      dst[k] = (double) src[j2] / 255; 
+      
+      // get Y,U,V chanels from bayer pattern
+      y = (double)src[j2]; 
       if (j & 1) {
-        dst[k+m2] = (double) src[j2-1] / 255;
-        dst[k+2*m2] = (double) src[j2+1] / 255;
+        u = (double)src[j2-1]; v = (double)src[j2+1];
       } else {
-        dst[k+m2] = (double) src[j2+1] / 255;
-        dst[k+2*m2] = (double) src[j2+3] / 255;
+        u = (double)src[j2+1]; v = (double)src[j2+3];
       }
+
+      // convert to RGB
+      // red:
+      dst[k] = (1.164383*(y-16) + 1.596027*(v-128))/255.0;
+      // green:
+      dst[k+m2] = (1.164383*(y-16) - 0.812968*(v-128) - 0.391726*(u-128))/255.0;
+      // blue:
+      dst[k+2*m2] = (1.164383*(y-16) + 2.017232*(u-128))/255.0;
     }
     src += width1 << 1;
     dst += m0;
@@ -238,6 +255,8 @@ static int l_grabFrame (lua_State *L) {
   
   return 0;
 }
+
+
 
 static int l_releaseCam (lua_State *L) {
   return 0;

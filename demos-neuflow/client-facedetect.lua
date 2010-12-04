@@ -14,6 +14,8 @@ bypass_neuflow = false
 op = OptionParser('%prog [options]')
 op:add_option{'-s', '--source', action='store', dest='source', 
               help='image source, can be one of: camera | lena'}
+op:add_option{'-c', '--camera', action='store', dest='camidx', 
+              help='if source=camera, you can specify the camera index: /dev/videoIDX [default=0]'}
 op:add_option{'-d', '--debug', action='store', dest='tty', 
               help='tty device [to dump messages from neuFlow]'}
 options,args = op:parse_args()
@@ -55,7 +57,7 @@ end
 convnet = newconvnet
 
 -- camera and converter
-source = nn.ImageSource(options.source or 'camera')
+source = nn.ImageSource(options.source or 'camera', nil, options.camidx)
 rgb2y = nn.ImageTransform('rgb2y')
 
 -- multiscale packer

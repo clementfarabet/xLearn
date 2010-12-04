@@ -1,8 +1,9 @@
+#!/usr/bin/env qlua
+------------------------------------------------------------
 -- e. culurciello
 -- temporal difference simulator
 
 require 'XLearn'
-require 'camiface'
 require 'os'
 require 'torch'
 require 'lab'
@@ -67,6 +68,10 @@ local function scale(frame)
 	scaled_frame = scaled_frame:div(scaled_frame:max())
 	return scaled_frame
 end
+
+-- displayers
+local disp = {Displayer(), Displayer(), Displayer(), Displayer(), 
+              Displayer(), Displayer(), Displayer(), Displayer()}
 
 -----------------------------------------
 -- function that receives a 2D tensor "input" 
@@ -190,27 +195,27 @@ end
 -- display internal maps
 local function displayInternals(camFrame_small, intensity, BY, RG, edge, framTD, fps, offset_X, offset_Y, zoom)
 	-- display color scaled image
-   	image.qtdisplay{tensor=camFrame_small, painter=painter, raw=true,
+        disp[1]:show{tensor=camFrame_small, painter=painter,
                    globalzoom=zoom, offset_x=offset_X, offset_y=offset_Y, legend='Input'}
                    
    	--disp temp diff image
-   	image.qtdisplay{tensor=frameTD, painter=painter, raw=true,
+   	disp[2]:show{tensor=frameTD, painter=painter,
                    globalzoom=zoom, offset_x=offset_X, offset_y=offset_Y+30+frameY:size(2), legend='Temp Diff'}
                    
    	--disp intensity
-   	image.qtdisplay{tensor=intensity, painter=painter, raw=true,
+   	disp[3]:show{tensor=intensity, painter=painter,
                    globalzoom=zoom, offset_x=offset_X+frameY:size(1), offset_y=offset_Y, legend='Intensity'}
 
 	--disp BY
-   	image.qtdisplay{tensor=BY, painter=painter, raw=true,
+   	disp[4]:show{tensor=BY, painter=painter,
                    globalzoom=zoom, offset_x=offset_X+frameY:size(1), offset_y=30+offset_Y+frameY:size(2), legend='BY'}
 
 	--disp RG
-   	image.qtdisplay{tensor=RG, painter=painter, raw=true,
+   	disp[5]:show{tensor=RG, painter=painter,
                    globalzoom=zoom, offset_x=offset_X+2*frameY:size(1), offset_y=offset_Y, legend='RG'}
                    
    	-- disp sobel image
-   	image.qtdisplay{tensor=edge, painter=painter, raw=true,
+   	disp[6]:show{tensor=edge, painter=painter,
                    globalzoom=zoom, offset_x=offset_X+2*frameY:size(1), offset_y=30+offset_Y+frameY:size(2), legend='Sobel'}
 	
 	-- disp FPS
@@ -238,7 +243,7 @@ local function displayer()
 	local zoom = 1/hslide
 
    	-- display input
-	image.qtdisplay{tensor=camFrameB, painter=painter, raw=true,
+	disp[7]:show{tensor=camFrameB, painter=painter,
                    globalzoom=zoom, offset_x=0, offset_y=30, legend='CAMERA INPUT, 640x480'}
                    
     --subsample (original is 640 x 480. We subsample to 160 x 120 and 80 x 60)
@@ -296,8 +301,10 @@ local function displayer()
 	salience_final = (salience1:add(salience2):add(salience3)):div(3)
 	if widget.checkBox1.checked then
 	-- disp salience map
-   		image.qtdisplay{tensor=salience_final, painter=painter, raw=true,
-                   globalzoom=zoom, offset_x=0, offset_y=camFrameA:size(2)+90, legend='FINAL SALIENCE MAP, 640x480'}
+   		disp[8]:show{tensor=salience_final, painter=painter,
+                             min=-1, max=1,
+                             globalzoom=zoom, offset_x=0, offset_y=camFrameA:size(2)+90, 
+                             legend='FINAL SALIENCE MAP, 640x480'}
     end
     
     --draw squares

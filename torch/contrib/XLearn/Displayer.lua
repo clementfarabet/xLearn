@@ -19,8 +19,17 @@ do
    end
 
    function Displayer:scale(tensor)
+      -- dims
+      local w = tensor:size(1)
+      local h = tensor:size(2)
+      if tensor:nDimension() == 3 then
+         local c = tensor:size(3)
+         self.disptensor:resize(w,h,c)
+      else
+         self.disptensor:resize(w,h)
+      end
       -- copy tensor to disptensor
-      self.disptensor:resizeAs(tensor):copy(tensor)
+      self.disptensor:copy(tensor)
       
       -- rescale min
       if not self.min then

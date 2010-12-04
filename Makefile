@@ -2,6 +2,7 @@
 
 INSTALL_PREFIX=/usr/local
 USE_OPENCV=0
+USE_V4L2=0
 USE_CAMIFACE=0
 USE_NEUFLOW=0
 USE_XFLOW=0
@@ -26,9 +27,10 @@ help:
 	@-echo "  EXPORT=filename  [default=xLearn-beta]"
 	@-echo ""
 	@-echo "  USE_OPENCV=1   [default=0]   ? OpenCV 2.x Lua wrapper (Linux webcam), requires OpenCV 2.x"
+	@-echo "  USE_V4L2=1     [default=0]   ? video4linux2 Lua wrapper (Linux webcam), requires V4L2"
 	@-echo "  USE_CAMIFACE=1 [default=0]   ? LibCamiface + Lua wrapper (MacOS webcam)"
 	@-echo "  USE_NEUFLOW=1  [default=0]   ? Compiler + DevTools for the NeuFlow arch"
-	@-echo "  USE_XFLOW=1     [default=0]   ? xFlow tools (xFlow parser/compiler + luaFlow framework)"
+	@-echo "  USE_XFLOW=1    [default=0]   ? xFlow tools (xFlow parser/compiler + luaFlow framework)"
 	@-echo "  USE_JPEG=1     [default=0]   ? LibJpeg wrapper"
 	@-echo "  USE_MPEG2=1    [default=0]   ? LibMpeg2 wrapper"
 	@-echo "  USE_BITOP=0    [default=1]   ? LuaBitOP library (bitwise operators for Lua)"
@@ -54,19 +56,27 @@ help:
 	@-echo "    $ sudo make USE_NEUFLOW=1 USE_OPENCV=1 install"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
-build: camiface luajit
+build: camiface luajit xflow
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
 
 camiface:
 ifeq (${USE_CAMIFACE},1)
+	@-echo "+++ installing camiface +++"
 	@-mkdir -p camiface/scratch
 	cd camiface/scratch && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} && make
 endif
 
 luajit:
 ifeq (${USE_LUAJIT},1)
+	@-echo "+++ installing LuaJIT +++"
 	cd luajit-torch && make && make install PREFIX=${INSTALL_PREFIX}
+endif
+
+xflow:
+ifeq (${USE_XFLOW},1)
+	@-echo "+++ installing xFlow tools +++"
+	cd xFlow && make install INSTALL_PREFIX=${INSTALL_PREFIX}
 endif
 
 extrabins:
@@ -98,6 +108,16 @@ update:
 	@-echo "+++ updating install +++"
 	@-cd torch/scratch && make install
 	@-echo "+++ install updated +++"
+
+devlinks:
+	@-echo "+++ creating soft links for easier devel +++"
+	@-rm -rf ${INSTALL_PREFIX}/share/lua/5.1/XLearn
+	ln -sf `pwd`/torch/contrib/XLearn ${INSTALL_PREFIX}/share/lua/5.1/XLearn
+	@-rm -rf ${INSTALL_PREFIX}/share/lua/5.1/NeuFlow
+	ln -sf `pwd`/torch/contrib/NeuFlow ${INSTALL_PREFIX}/share/lua/5.1/NeuFlow
+	@-rm -rf ${INSTALL_PREFIX}/share/lua/5.1/luaFlow
+	ln -sf `pwd`/torch/contrib/luaFlow ${INSTALL_PREFIX}/share/lua/5.1/luaFlow
+	@-echo "+++ creating soft links for easier devel +++"
 
 export:
 	@-echo "+++ exporting project to" ${EXPORT}.tgz "+++"

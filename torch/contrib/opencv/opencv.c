@@ -350,9 +350,14 @@ static int l_cvCaptureFromCAM (lua_State *L) {
   // Get Tensor's Info
   THTensor * image_byte = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
 
+  // idx
+  int camidx = 0;
+  if (lua_isnumber(L, 2)) camidx = lua_tonumber(L, 2);
+
   // get camera
   if( camera == 0 ) {
-    camera = cvCaptureFromCAM(0);
+    printf("opencv: starting capture on device %d\n", camidx);
+    camera = cvCaptureFromCAM(camidx);
     if (!camera) perror("Could not initialize capturing...\n");
   }
 

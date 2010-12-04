@@ -1,10 +1,10 @@
+#!/usr/bin/env qlua
 ----------------------------------
 -- an opencv tester
 ----------------------------------
 
 require 'XLearn'
 require 'opencv'
-require 'camiface'
 
 -- need QT
 toolBox.useQT()
@@ -16,7 +16,8 @@ local ui = paths.thisfile('opencv-tester.ui')
 function demo()
 
    -- Camera frame
-   local camera = Camera()
+   local camera = nn.ImageSource('camera')
+   local vframesat = torch.Tensor(640,480,3)
    local cameraframe = torch.CharTensor(640,480,3)
 
    -- and results
@@ -32,9 +33,18 @@ function demo()
    local widget = qtuiloader.load(ui)
    local painter = qt.QtLuaPainter(widget.frame)
 
+   -- Displayers
+   local disp_input = Displayer()
+   local disp_sobel = Displayer()
+   local disp_canny = Displayer()
+   local disp_oflow_x = Displayer()
+   local disp_oflow_y = Displayer()
+
    -- Sliders
    local vslide = widget.verticalSlider.value
    local hslide = widget.horizontalSlider.value
+   widget.horizontalSlider_2.value = 80
+   widget.horizontalSlider_3.value = 20
 
    local function process()
       -- zoom 
@@ -47,11 +57,19 @@ function demo()
       painter:setfont(qt.QFont{serif=false,italic=true,size=12})
 
       -- Get camera frame
-      camera:getFrame(cameraframe)
-      image.qtdisplay{ tensor=frame, painter=painter, 
+      local vframe = camera:forward()
+      image.scaleForDisplay{tensor=vframe,tensorOut=vframesat}
+
+      -- disp
+      disp_input:show{ tensor=vframesat, painter=painter, 
                        globalzoom=zoom,
+                       min=0, max=1,
                        offset_x=0, offset_y=40, 
                        legend='Face Detect'}
+
+      -- copy
+      vframesat:mul(255)
+      cameraframe:copy(vframesat)
 
       -- get green channel
       frame = cameraframe:narrow(3,2,1)
@@ -61,8 +79,9 @@ function demo()
          libopencv.canny(frame, canny, 
                          widget.horizontalSlider_2.value, 
                          widget.horizontalSlider_3.value, 3)
-         image.qtdisplay{ tensor=canny, painter=painter, 
+         disp_canny:show{ tensor=canny, painter=painter, 
                           globalzoom=zoom,
+                          min=-1, max=1,
                           offset_x=800, offset_y=40,
                           legend='Canny filter'}
       end
@@ -70,9 +89,10 @@ function demo()
       -- TEST 2 : Sobel
       if widget.radioButton_0.checked then
          libopencv.sobel(frame, sobel)
-         image.qtdisplay{ tensor=sobel, painter=painter, 
+         disp_sobel:show{ tensor=sobel, painter=painter, 
                           min=-32, max=64, 
                           globalzoom=zoom,
+                          min=-32, max=32,
                           offset_x=0, offset_y=560,
                           legend='Sobel filter'}
       end
@@ -81,16 +101,18 @@ function demo()
       if widget.radioButton_2.checked then
          libopencv.calcOpticalFlow(frame, previous, motion_x, motion_y)
          previous:copy(frame)
-         image.qtdisplay{ tensor=motion_x, painter=painter, 
-                          globalzoom=zoom,
-                          zoom=8,
-                          offset_x=800, offset_y=570,
-                          legend='Optic Flow - X' }
-         image.qtdisplay{ tensor=motion_y, painter=painter, 
-                          globalzoom=zoom,
-                          zoom=8,
-                          offset_x=800, offset_y=780,
-                          legend='Optic Flow - Y' }
+         disp_oflow_x:show{ tensor=motion_x, painter=painter, 
+                            globalzoom=zoom,
+                            min=-100, max=100,
+                            zoom=8,
+                            offset_x=800, offset_y=570,
+                            legend='Optic Flow - X' }
+         disp_oflow_y:show{ tensor=motion_y, painter=painter, 
+                            globalzoom=zoom,
+                            min=-100, max=100,
+                            zoom=8,
+                            offset_x=800, offset_y=780,
+                            legend='Optic Flow - Y' }
       end
 
       -- TEST 4 : Face Detect
@@ -98,16 +120,18 @@ function demo()
          faces = libopencv.haarDetectObjects(cameraframe, 'haarcascade_frontalface_alt.xml')
 
          -- draw a box on each face ;-)
-         faces[1] = 100
-         faces[2] = 200
-         faces[3] = 80
-         faces[4] = 80
-         for i=1,#faces,4 do
-            image.qtdrawbox{ painter=painter,
-                             x=faces[i], y=faces[i+1],
-                             w=faces[i+2], h=faces[i+3],
-                             globalzoom=zoom, 
-                             legend='face' }
+         if faces then
+            faces[1] = 100
+            faces[2] = 200
+            faces[3] = 80
+            faces[4] = 80
+            for i=1,#faces,4 do
+               image.qtdrawbox{ painter=painter,
+                                x=faces[i], y=faces[i+1],
+                                w=faces[i+2], h=faces[i+3],
+                                globalzoom=zoom, 
+                                legend='face' }
+            end
          end
       end
 
