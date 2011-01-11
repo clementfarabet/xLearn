@@ -1,6 +1,32 @@
+
+The majority of this software is licensed under the terms of the MIT 
+license reproduced below.
+This means that all this code is free software and can be used for
+both academic and commercial purposes at absolutely no cost.
+
+For details and rationale, see http://www.lua.org/license.html.
+
+All the 3rd-Party modules (available via 'make USE_3RDPARTY=1')
+are distributed under other, more restrictive licenses:
+
++ stereo: GNU General Public License
++ mstsegm: GNU General Public License
++ powerwatersegm: CeCILL license
++ CSparse: GNU Lesser General Public License
++ opticalFlow: no original license [but forbids commercial use]
+
+All those licenses are detailled below. The source/authors of each
+3rd party package is clearly identified in the root of each package.
+For instance, the file torch/contrib/stereo/init.lua
+summarizes the license/authors of the stereo package, and in general
+each torch/contrib/{PACKAGE_NAME}/init.lua does so.
+
+
+======================================================================
+For all the main packages EXCLUDING stereo, mstsegm, opticalFlow:
+
 Copyright (c) 2009-2010 New York University, Yale University
-Contributors: Clement Farabet, Benoit Corda, Polina Akselrod, 
-              Koray Kavukcuoglu, Yann LeCun, Eugenio Culurciello
+Contributors: Clement Farabet, Benoit Corda, Polina Akselrod
 
 Copyright (c) 2006-2008 NEC Laboratories America
 Contributors: Ronan Collobert, Leon Bottou, Jason Weston, Iain Melvin
@@ -10,6 +36,8 @@ Contributors: Samy Bengio
 
 Copyright (c) 2001-2004 IDIAP Research Institute
 Contributors: Ronan Collobert, Samy Bengio, Johnny Mariethoz
+
+Copyright (C) 1994-2008 Lua.org, PUC-Rio.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -41,3 +69,85 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+======================================================================
+For the two packages stereo and mstsegm:
+
+Copyright (C) 2006,2007,2008,2009,2010 Pedro Felzenszwalb
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+
+
+======================================================================
+For the package powerwatersegm:
+
+Copyright ESIEE (2009) Camille Couprie (c.couprie@esiee.fr)
+
+Contributors : 
+Hugues Talbot (h.talbot@esiee.fr)
+Leo Grady (leo.grady@siemens.com)
+Laurent Najman (l.najman@esiee.fr)
+
+This software contains some image processing algorithms whose purpose 
+is to be used primarily for research.
+
+This software is governed by the CeCILL license under French law and
+abiding by the rules of distribution of free software.  You can  use, 
+modify and/ or redistribute the software under the terms of the CeCILL
+license as circulated by CEA, CNRS and INRIA at the following URL
+"http://www.cecill.info". 
+
+As a counterpart to the access to the source code and  rights to copy,
+modify and redistribute granted by the license, users are provided only
+with a limited warranty  and the software's author,  the holder of the
+economic rights,  and the successive licensors  have only  limited
+liability. 
+
+In this respect, the user's attention is drawn to the risks associated
+with loading,  using,  modifying and/or developing or reproducing the
+software by the user in light of its specific status of free software,
+that may mean  that it is complicated to manipulate,  and  that  also
+therefore means  that it is reserved for developers  and  experienced
+professionals having in-depth computer knowledge. Users are therefore
+encouraged to load and test the software's suitability as regards their
+requirements in conditions enabling the security of their systems and/or 
+data to be ensured and,  more generally, to use and operate it in the 
+same conditions as regards security. 
+
+The fact that you are presently reading this means that you have had
+knowledge of the CeCILL license and that you accept its terms.
+
+
+======================================================================
+For the package CSparse:
+
+CSparse: a Concise Sparse matrix package.
+Copyright (c) 2006, Timothy A. Davis.
+http://www.cise.ufl.edu/research/sparse/CSparse
+
+CSparse is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either
+version 2.1 of the License, or (at your option) any later version.
+
+CSparse is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public
+License along with this Module; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA

@@ -615,33 +615,74 @@ function math.approx_line(args)
    seg_table.odd = args.odd or false
    
    return seg_table
-   
-
 end
+
+-- This function returns segments in correct format
+-- for nn.HardTanh nonlinearity (which is 3 segments)
+-- HardTanh is defined as:
+--
+--    * f(x) = 1, if x > 1,
+--    * f(x) = -1, if x < -1,
+--    * f(x) = x, otherwise. 
+function math.HardTanh(args)
+   local num_of_segs = args.nbSegments or 8
+   
+   local seg_table = {}
+
+   table.insert(seg_table, {min = 0, a = 1,b = 0})
+   local real_num_of_segs = 1
+   
+   -- we need to add more segments because hardware expects 8!
+   if(real_num_of_segs < num_of_segs) then
+      for i = 1, num_of_segs-real_num_of_segs do
+	  table.insert(seg_table, {min = 1,a = 0,b = 1})
+      end
+   end
+
+   -- Prepare segments to return in the needed format:
+   -- fixed point and order reversed
+   local Q = args.Q or 8 
+   
+   seg_table = table.reverse(seg_table)
+   seg_table.num_of_segs = 0
+   for i,seg in ipairs(seg_table) do
+      
+      seg.a = math.round(seg.a*2^Q)
+      seg.b = math.round(seg.b*2^Q)
+      seg.min = math.round(seg.min*2^Q)
+      
+      seg_table.num_of_segs = seg_table.num_of_segs + 1
+      
+      --DEBUG
+      --print('a = ', seg.a)
+      --print('b = ', seg.b)
+      --print('min = ', seg.min)
+   end
+
+   -- and append type we put segments on the whole range now
+   seg_table.even = false
+   seg_table.odd = true
+   
+   return seg_table
+end
+
 
 -- Function checks if the file with the given name exist
 -- if not the function generates linear approximation segments
 -- an writes them to file with the given file name
 function math.approx(args)
-   --print('coefpath = ',coefpath)
-   --print('home_path = ',home_path)
-      
    local filename = 'coef_'..args.name
    local coefs
    local filepath = coefpath..'/'..filename
-   -- if (file_exists(paths.concat(paths.install_lua_path, 'NeuFlow/',filename))) then
+   
    if (file_exists(filepath)) then 
       print('# reading from file segments for: ', filename)
-      --coefs = read_coefs(paths.concat(paths.install_lua_path, 'NeuFlow/',filename))
       coefs = read_coefs(filepath)
    else
       print('# there are no segments for requested mapping, generating segments for: ', filename)
       coefs = math.approx2(args)
       print('# caching segments to file: ', filename)
-      --write_coefs(coefs, paths.concat(paths.install_lua_path, 'NeuFlow/',filename))
       write_coefs(coefs, filepath)
-      --print('Segments have been written. Now update_install and run again, exiting...')
-      --os.exit()
    end
    return coefs
 end

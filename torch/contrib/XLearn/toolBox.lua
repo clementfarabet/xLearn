@@ -390,6 +390,20 @@ end
 
 
 --------------------------------------------------------------------------------
+-- toolBox.isJIT()
+-- returns true/false depending on the just-in-time compiler status
+--------------------------------------------------------------------------------
+function toolBox.isJIT(...) 
+   if arg then 
+      print('# JIT OFF [regular Lua]') 
+      return false 
+   else print('# JIT ON [using LuaJIT]') 
+      return true 
+   end 
+end
+
+
+--------------------------------------------------------------------------------
 -- toolBox.exec()
 -- execute an OS command, but retrieves the result in a string
 -- side effect: creates a file in /tmp/

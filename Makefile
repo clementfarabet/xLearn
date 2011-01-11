@@ -5,6 +5,7 @@ USE_OPENCV=0
 USE_V4L2=0
 USE_CAMIFACE=0
 USE_NEUFLOW=0
+USE_3RDPARTY=0
 USE_XFLOW=0
 USE_JPEG=0
 USE_MPEG2=0
@@ -31,6 +32,7 @@ help:
 	@-echo "  USE_CAMIFACE=1 [default=0]   ? LibCamiface + Lua wrapper (MacOS webcam)"
 	@-echo "  USE_NEUFLOW=1  [default=0]   ? Compiler + DevTools for the NeuFlow arch"
 	@-echo "  USE_XFLOW=1    [default=0]   ? xFlow tools (xFlow parser/compiler + luaFlow framework)"
+	@-echo "  USE_3RDPARTY=1 [default=0]   ? 3rd party packages (stereo, segmentation, optical flow)"
 	@-echo "  USE_JPEG=1     [default=0]   ? LibJpeg wrapper"
 	@-echo "  USE_MPEG2=1    [default=0]   ? LibMpeg2 wrapper"
 	@-echo "  USE_BITOP=0    [default=1]   ? LuaBitOP library (bitwise operators for Lua)"
@@ -58,7 +60,7 @@ help:
 
 build: camiface luajit xflow
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
 
 camiface:
 ifeq (${USE_CAMIFACE},1)

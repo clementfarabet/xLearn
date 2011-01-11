@@ -227,7 +227,8 @@ do
                              {type='number', help='display zoom'},
                              {type='number', help='lower-bound for range'},
                              {type='number', help='upper-bound for range'},
-                             {type='gfx.Window', help='window descriptor'})
+                             {type='gfx.Window', help='window descriptor'},
+                             {type='string', help='legend'})
       end
 
       -- Parse Args
@@ -239,6 +240,7 @@ do
       local min = arg[2]
       local max = arg[3]
       local w = arg[4]
+      local legend = arg[5] or 'image.display'
 
       if input:nDimension() == 2 or input:size(3) == 1 or input:size(3) == 3 then
          -- Rescale range
@@ -247,13 +249,13 @@ do
          -- Rescale geometry
          local x = math.min(input:size(1)*zoom,800)
          local y = math.min(input:size(2)*zoom,600)
-         local w = w or gfx.Window(x,y,'image.display')
+         w = w or gfx.Window(x,y,legend)
 
          -- blit
          w:blit(myIn, zoom)
 
       else -- multichanel image (collection of images/features)
-         image.displayList{images=input, zoom=zoom, min=min, max=max, window=w}
+         w = image.displayList{images=input, zoom=zoom, min=min, max=max, window=w, legend=legend}
       end
 
       return w
@@ -380,6 +382,226 @@ do
          logauss:div(logauss:sum())
       end
       return logauss
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.loadVideo()
+   -- loads arbitrary videos, using FFMPEG (and a temp jpeg cache)
+   -- returns a table (list) of images
+   --
+   function image.loadVideo(path,w,h,fps,length,channel)
+      -- usage
+      if not image.loadVideo_usage then
+         image.loadVideo_usage = toolBox.usage('image.loadVideo',
+                                     'loads a video into a table of tensors:\n'
+                                        .. ' + relies on ffpmeg, which must be installed\n'
+                                        .. ' + creates a local scratch/ to hold jpegs',
+                                        nil,
+                                        {type='string', help='path to video', req=true},
+                                        {type='number', help='width [default=500]'},
+                                        {type='number', help='height [default=376]'},
+                                        {type='number', help='frames per second [default=5]'},
+                                        {type='number', help='length, in seconds [default=MAX]'},
+                                        {type='number', help='video channel [default=0]'})
+      end
+
+      -- check ffmpeg existence
+      local res = toolBox.exec('ffmpeg')
+      if res:find('not found') then 
+         local c = toolBox.COLORS
+         error(c.Red .. 'ffmpeg required, please install it (apt-get install ffmpeg)' .. c.none)
+      end
+
+      -- check args
+      if not path then
+         error(image.loadVideo_usage)
+      end
+
+      -- make cache
+      local date = os.date():gsub(' ','_')
+      local path_cache = paths.concat('scratch',date)
+      os.execute('mkdir -p ' .. path_cache)
+      os.execute('rm ' .. paths.concat(path_cache,'*.jpg'))
+
+      -- process video
+      os.execute('ffmpeg -i ' .. path .. 
+                 ' -r ' .. (fps or 5) .. 
+                 ' -t ' .. (length or 1000000) ..
+                 ' -map 0.' .. (channel or 0) ..
+                 ' -s ' .. (w or '500') .. 'x' .. (h or '376') .. 
+                 ' -qscale 1' ..
+                 ' ' .. paths.concat(path_cache,'frame-%04d.jpg'))
+
+      -- load JPEGs
+      local imgs = {}
+      local idx = 1
+      for file in paths.files(path_cache) do
+         if file ~= '.' and file ~= '..' then
+            local fname = paths.concat(path_cache,string.format('frame-%04d.jpg',idx))
+            local img = image.load(fname)
+            table.insert(imgs,img)
+            idx = idx + 1
+         end
+      end
+
+      -- record meta params
+      imgs.fps = (fps or 5)
+
+      -- return image
+      return imgs
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.playVideo()
+   -- plays a video (must have been loaded with loadVideo())
+   --
+   function image.playVideo(seq,zoom,loop)
+      -- usage
+      if not image.playVideo_usage then
+         image.playVideo_usage = toolBox.usage('image.playVideo',
+                                     'plays a video:\n'
+                                        .. ' + video must have been loaded with image.loadVideo()\n'
+                                        .. ' + or else, it must be a list of tensors',
+                                        nil,
+                                        {type='table', help='list/table of images', req=true},
+                                        {type='number', help='zoom [default=1]'},
+                                        {type='boolean', help='loop [default=false]'})
+      end
+
+      if not seq then
+         error(image.playVideo_usage)
+      end
+
+      -- plays vid
+      zoom = zoom or 1
+      local p =  qtwidget.newwindow(seq[1]:size(1)*zoom,seq[1]:size(2)*zoom)
+      local disp = Displayer()
+      local frame = torch.Tensor()
+      local pause = 1 / (seq.fps or 5) - 0.03
+      while true do
+         for i,frameByte in ipairs(seq) do
+            frame:resize(frameByte:size(1),frameByte:size(2),frameByte:size(3))
+            frame:copy(frameByte)
+            disp:show{tensor=frame,painter=p,legend='playing sequence',zoom=zoom}
+            if pause and pause>0 then libxlearn.usleep(pause*1e6) end
+         end
+         if not loop then break end
+      end
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.loadVideo3D()
+   -- loads arbitrary 3D videos, using FFMPEG (and a temp jpeg cache)
+   -- returns a table (list) of pairs of images
+   --
+   function image.loadVideo3D(path,w,h,fps,length,shift)
+      -- usage
+      if not image.loadVideo3D_usage then
+         image.loadVideo3D_usage = toolBox.usage('image.loadVideo3D',
+                                     'loads a video into a table of tensors:\n'
+                                        .. ' + relies on ffpmeg, which must be installed\n'
+                                        .. ' + creates a local scratch/ to hold jpegs',
+                                        nil,
+                                        {type='string', help='path to video', req=true},
+                                        {type='number', help='width [default=500]'},
+                                        {type='number', help='height [default=375]'},
+                                        {type='number', help='frames per second [default=5]'},
+                                        {type='number', help='length, in seconds [default=MAX]'},
+                                        {type='number', help='realign: left shift right image by N pixels and crop [default=0]'})
+      end
+
+      -- check ffmpeg existence
+      local res = toolBox.exec('ffmpeg')
+      if res:find('not found') then 
+         local c = toolBox.COLORS
+         error(c.Red .. 'ffmpeg required, please install it (apt-get install ffmpeg)' .. c.none)
+      end
+
+      -- check args
+      if not path then
+         error(image.loadVideo3D_usage)
+      end
+
+      -- load channels separately and merge
+      local left = image.loadVideo(path,w,h,fps,length,0)
+      local right = image.loadVideo(path,w,h,fps,length,2)
+      local pairs = {fps=left.fps}
+      for i = 1,#left do
+         pairs[i] = {left[i],right[i]}
+      end
+
+      -- optional shit
+      if shift then
+         for i,pair in ipairs(pairs) do
+            if shift > 0 then
+               -- shit and crop right channel
+               pair[2] = pair[2]:narrow(1,1+shift,pair[2]:size(1)-shift)
+               -- crop left channel
+               pair[1] = pair[1]:narrow(1,1,pair[1]:size(1)-shift)
+            else
+               -- shit and crop left channel
+               pair[1] = pair[1]:narrow(1,1+shift,pair[1]:size(1)-shift)
+               -- crop right channel
+               pair[2] = pair[2]:narrow(1,1,pair[2]:size(1)-shift)
+            end
+         end
+      end
+
+      return pairs
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.playVideo3D()
+   -- plays a video (must have been loaded with loadVideo3D())
+   --
+   function image.playVideo3D(seq,zoom,loop)
+      -- usage
+      if not image.playVideo3D_usage then
+         image.playVideo3D_usage = toolBox.usage('image.playVideo3D',
+                                     'plays a video:\n'
+                                        .. ' + video must have been loaded with image.loadVideo()\n'
+                                        .. ' + or else, it must be a list of pairs of tensors',
+                                        nil,
+                                        {type='table', help='list/table of images', req=true},
+                                        {type='number', help='zoom [default=1]'},
+                                        {type='boolean', help='loop [default=375]'})
+      end
+
+      if not seq then
+         error(image.playVideo3D_usage)
+      end
+
+      -- plays vid
+      zoom = zoom or 1
+      local p =  qtwidget.newwindow(seq[1][1]:size(1)*zoom,seq[1][1]:size(2)*zoom)
+      local disp = Displayer()
+      local framel = torch.Tensor()
+      local framer = torch.Tensor()
+      local frame = torch.Tensor()
+      local pause = 1 / (seq.fps or 5) - 0.08
+      while true do
+         for i,frameByte in ipairs(seq) do
+            -- left
+            framel:resize(frameByte[1]:size(1),frameByte[1]:size(2),frameByte[1]:size(3))
+            framel:copy(frameByte[1])
+            -- right
+            framer:resizeAs(framel)
+            framer:copy(frameByte[2])
+            -- merged
+            frame:resize(frameByte[1]:size(1),frameByte[1]:size(2),3)
+            frame:select(3,1):copy(framel:select(3,1))
+            frame:select(3,2):copy(framer:select(3,1))
+            frame:select(3,3):copy(framer:select(3,1))
+            -- disp
+            disp:show{tensor=frame,painter=p,legend='playing 3D sequence [left=RED, right=CYAN]',zoom=zoom}
+            if pause and pause>0 then libxlearn.usleep(pause*1e6) end
+         end
+         if not loop then break end
+      end
    end
 
 
@@ -571,8 +793,9 @@ do
                              {arg='offset_x', type='number', help='horizontal display offset'},
                              {arg='offset_y', type='number', help='vertical display offset'},
                              {arg='legend', type='string', help='window title'},
-                             {arg='window_w', type='number', help='window width'},
-                             {arg='window_h', type='number', help='window height'},
+                             {arg='legends', type='string', help='individual legends'},
+                             {arg='win_w', type='number', help='window width'},
+                             {arg='win_h', type='number', help='window height'},
                              {arg='window', type='gfx.Window', help='window descriptor'})
       end
 
@@ -587,6 +810,7 @@ do
       local offset_x = args.offset_x or 0
       local offset_y = args.offset_y or 0
       local legend = args.legend or 'image.displayList'
+      local legends = args.legends or {}
       local window_w = args.win_w or 1000
       local window_h = args.win_h or 700
       local painter = args.window or gfx.Window(window_w, window_h, legend)
@@ -602,8 +826,22 @@ do
          error(image.displayList_usage)
       end
 
+      -- helper for legends
+      local boldtxt = 
+         function (text,x,y)
+            local p
+            for i=-1,1 do
+               for j=-1,1 do
+                  p=painter:text(text, x*zoom+i, y*zoom+j, 12*zoom)
+               end
+            end
+            p:set('penColor',{0,0,0})
+            painter:text(text, x*zoom, y*zoom, 12*zoom):set('penColor',{1,1,1})
+         end
+
       -- display images
       local max_height = 0
+      painter:batchBegin()
       for i = 1,#images do
          local imageNormed = image.scaleForDisplay{tensor=images[i], 
                                                    min=min, max=max}
@@ -613,11 +851,15 @@ do
             max_height = 0
          end
          painter:blit(imageNormed, zoom, offset_x, offset_y)
+         if legends[i] then
+            boldtxt(legends[i], offset_x+5, offset_y+imageNormed:size(2)-3)
+         end
          offset_x = offset_x + imageNormed:size(1)*zoom
          if imageNormed:size(2) > max_height then
             max_height = imageNormed:size(2)
          end
       end
+      painter:batchEnd()
 
       -- return display
       return painter, offset_x, offset_y
@@ -630,12 +872,43 @@ do
    -- @param seed     used to generate a different set of colors
    --
    function image.createColorMap(nbColor,seed)
+      -- note: the best way of obtaining optimally-spaced
+      -- colors is to generate them around the HSV wheel,
+      -- by varying the Hue component
       local map = torch.Tensor(nbColor,3)
-      random.manualSeed(seed or 123)
-      for i = 1,nbColor do
-         map[i][1] = 2*random.uniform()
-         map[i][2] = 2*random.uniform()
-         map[i][3] = 2*random.uniform()
+      local huef = 0
+      local satf = 0
+      for i = 1,nbColor do         
+         -- HSL
+         local hue = math.mod(huef,360)
+         local sat = math.mod(satf,0.7) + 0.3
+         local light = 0.5
+         huef = huef + 39
+         satf = satf + 1/9
+         -- HSL -> RGB
+         local c = (1 - math.abs(2*light-1))*sat
+         local huep = hue/60
+         local x = c*(1-math.abs(math.mod(huep,2)-1))
+         local redp
+         local greenp
+         local bluep
+         if huep < 1 then
+            redp = c; greenp = x; bluep = 0
+         elseif huep < 2 then
+            redp = x; greenp = c; bluep = 0            
+         elseif huep < 3 then
+            redp = 0; greenp = c; bluep = x
+         elseif huep < 4 then
+            redp = 0; greenp = x; bluep = c
+         elseif huep < 5 then
+            redp = x; greenp = 0; bluep = c
+         else
+            redp = c; greenp = 0; bluep = x
+         end
+         local m = light - c/2
+         map[i][1] = redp + m
+         map[i][2] = greenp + m
+         map[i][3] = bluep + m
       end
       return map
    end
@@ -670,7 +943,7 @@ do
       return maxMap:select(3,1)
    end
 
-   function image.maskToRGB(mask, colorMap)
+   function image.maskToRGB_old(mask, colorMap)
       local rgbmap = lab.zeros(mask:size(1), mask:size(2), 3)
       rgbmap:select(3,1):map(mask, function(rgb, seg) return colorMap[seg][1] end)
       rgbmap:select(3,2):map(mask, function(rgb, seg) return colorMap[seg][2] end)
@@ -678,7 +951,39 @@ do
       return rgbmap
    end
 
-   function image.rescaleSegmentation(rgbmask, upsampling, input)
+   function image.maskToRGB(mask, colorMap, rgbmap)
+      --local rgbmap = lab.zeros(mask:size(1), mask:size(2), 3)
+      rgbmap:fill(0)
+
+      -- DEBUG
+      --print('colorMap size: ')
+      --print(colorMap:size())
+      -- print('mask size: ')
+      -- print(mask:size())
+      --print('rgbmap size: ')
+      --print(rgbmap:size())
+      --print(colorMap)
+      --print(mask)
+      -- rgbmap:select(3,1):map(mask, function(rgb, seg) return colorMap[seg][1] end)
+      -- rgbmap:select(3,2):map(mask, function(rgb, seg) return colorMap[seg][2] end)
+      -- rgbmap:select(3,3):map(mask, function(rgb, seg) return colorMap[seg][3] end)
+      
+      -- for k = 1,3 do
+      -- 	 for i=1,rgbmap:size(1) do
+      -- 	    for j = 1, rgbmap:size(2) do
+      -- 	       rgbmap[i][j][k] = colorMap[mask[i][j]][k]
+      -- 	    end
+      -- 	 end
+      --       end
+      --local copyMask = torch.Tensor():resizeAs(mask):copy(mask)
+      --local copyColorMap = torch.Tensor():resizeAs(colorMap):copy(colorMap)
+      --libxlearn.image_maskToRGB(copyMask, copyColorMap, rgbmap)
+      libxlearn.image_maskToRGB(mask, colorMap, rgbmap)
+
+      return rgbmap
+   end
+
+   function image.rescaleSegmentation_old(rgbmask, upsampling, input)
       local upscaled = torch.Tensor():resizeAs(input):zero()
       local startx = math.floor((input:size(1) - rgbmask:size(1)*upsampling)/2)
       local starty = math.floor((input:size(2) - rgbmask:size(2)*upsampling)/2)
@@ -687,14 +992,39 @@ do
       return upscaled
    end
 
-   function image.applySegmentation(input, output, upsampling, colorMap, merged)
+   function image.rescaleSegmentation(rgbmask, upsampling, input, upscaled)
+      --local upscaled = torch.Tensor():resizeAs(input):zero()
+      upscaled:fill(0)
+      local startx = math.floor((input:size(1) - rgbmask:size(1)*upsampling)/2)
+      local starty = math.floor((input:size(2) - rgbmask:size(2)*upsampling)/2)
+      local rescaled = upscaled:narrow(1,startx,rgbmask:size(1)*upsampling):narrow(2,starty,rgbmask:size(2)*upsampling) 
+      image.scale(rgbmask, rescaled, 'bilinear')
+      return upscaled
+   end
+
+
+
+
+   function image.applySegmentation(input, output, upsampling, colorMap, merged, rgbmap, upscaled, result)
       local maxedOutput = image.maxPoolingChannel(output)
       if merged then
          maxedOutput:apply(function (x) return merged[x] end)
       end
-      local rgbmask = image.maskToRGB(maxedOutput, colorMap)
-      local scaledmask = image.rescaleSegmentation(rgbmask, upsampling, input)
-      local result = torch.Tensor():resizeAs(input)
+      
+      if not rgbmap then
+	 rgbmap = lab.zeros(output:size(1), output:size(2), 3)
+      end
+      if not upscaled then
+	 upscaled = torch.Tensor():resizeAs(input)
+      end
+      if not result then
+	 result = torch.Tensor():resizeAs(input)
+      end
+
+
+      local rgbmask = image.maskToRGB(maxedOutput, colorMap, rgbmap)
+      local scaledmask = image.rescaleSegmentation(rgbmask, upsampling, input, upscaled)
+     
       for i=1,3 do
          -- copy grayscale version of the input
          result:select(3,i):copy(input:select(3,2))
@@ -716,15 +1046,17 @@ do
       local legend = args.legend or 'segmentation'
       local painter = args.painter 
          or qtwidget.newwindow((input:size(1)+140)*zoom, input:size(2)*zoom, legend)
+      local rgbmap = args.rgbmap or lab.zeros(mask:size(1), mask:size(2), 3)
+      local upscaled = args.upscaled or torch.Tensor():resizeAs(input)
 
       -- merge mask and image
-      local result
+      local result = args.result or torch.Tensor():resizeAs(input)
       local scaledmask
       if mask:size(1) == input:size(1) and mask:size(2) == input:size(2) then
          result = image.mergeSegmentation(input, mask, colormap)
       else
          result,scaledmask = image.applySegmentation(input, mask, upsampling, 
-                                                     colormap, mergedClasses)
+                                                     colormap, mergedClasses, rgbmap, upscaled, result)
       end
 
       -- paint tensor
@@ -752,7 +1084,7 @@ do
       end
       
       -- for ref
-      return result,scaledmask
+      return result,scaledmask,painter
    end
 
    function image.qtdisplaySegClasses(args)
@@ -1344,6 +1676,7 @@ do
    -- converts a RGB image to YUV
    --
    function image.rgb2yuv(input, ...)
+      local arg = {...}
       local output = arg[1] or torch.Tensor()
 
       -- resize
@@ -1378,6 +1711,7 @@ do
    -- converts a YUV image to RGB
    --
    function image.yuv2rgb(input, ...)
+      local arg = {...}
       local output = arg[1] or torch.Tensor()
 
       -- resize
@@ -1408,6 +1742,7 @@ do
    -- converts a RGB image to Y (discards U/V)
    --
    function image.rgb2y(input, ...)
+      local arg = {...}
       local output = arg[1] or torch.Tensor()
       
       -- resize
@@ -1426,6 +1761,146 @@ do
 
       -- return YUV image
       return output
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.hsl2rgb(image)
+   -- converts an HSL image to RGB
+   --
+   function image.hsl2rgb(input, ...)
+      local arg = {...}
+      local output = arg[1] or torch.Tensor()
+
+      -- resize
+      output:resizeAs(input)
+
+      -- temp variables
+      local img = input:select(3,1)
+      local chroma = torch.Tensor():resizeAs(img)
+      local huep = torch.Tensor():resizeAs(img)
+      local huepdiv2 = torch.Tensor():resizeAs(img)
+      local X = torch.Tensor():resizeAs(img)
+      local m = torch.Tensor():resizeAs(img)
+      local R = torch.Tensor():resizeAs(img)
+      local G = torch.Tensor():resizeAs(img)
+      local B = torch.Tensor():resizeAs(img)
+
+      -- input chanels
+      local inputH = input:select(3,1)
+      local inputS = input:select(3,2)
+      local inputL = input:select(3,3)
+
+      -- output chanels
+      local outputRed = output:select(3,1)
+      local outputGreen = output:select(3,2)
+      local outputBlue = output:select(3,3)
+
+      -- compute intermediate values
+      chroma:copy(inputL):mul(2):add(-1):abs():mul(-1):add(1):cmul(inputS)
+      huep:copy(inputH):div(60)
+      huepdiv2:copy(huep):div(2):floor():mul(2)
+      X:copy(huepdiv2):mul(-1):add(huep)
+      X:add(-1):abs():mul(-1):add(1):cmul(chroma)
+
+      -- compute unnormalized R,G,B
+      R:copy(huep)
+      R:map2(chroma, X, function (h, c, x)
+                           if h < 1 then
+                              return c
+                           elseif h < 2 then
+                              return x
+                           elseif h < 3 then
+                              return 0
+                           elseif h < 4 then
+                              return 0
+                           elseif h < 5 then
+                              return x
+                           elseif h < 6 then
+                              return c
+                           else
+                              return 0
+                           end
+                        end)
+      G:copy(huep)
+      G:map2(chroma, X, function (h, c, x)
+                           if h < 1 then
+                              return x
+                           elseif h < 2 then
+                              return c
+                           elseif h < 3 then
+                              return c
+                           elseif h < 4 then
+                              return x
+                           elseif h < 5 then
+                              return 0
+                           elseif h < 6 then
+                              return 0
+                           else
+                              return 0
+                           end
+                        end)
+      B:copy(huep)
+      B:map2(chroma, X, function (h, c, x)
+                           if h < 1 then
+                              return 0
+                           elseif h < 2 then
+                              return 0
+                           elseif h < 3 then
+                              return x
+                           elseif h < 4 then
+                              return c
+                           elseif h < 5 then
+                              return c
+                           elseif h < 6 then
+                              return x
+                           else
+                              return 0
+                           end
+                        end)
+
+      -- postprocess
+      m:copy(chroma):mul(-0.5):add(inputL)
+      outputRed:copy(R):add(m)
+      outputGreen:copy(G):add(m)
+      outputBlue:copy(B):add(m)
+
+      -- return RGB image
+      return output
+   end
+
+   function image.test_hsl2rgb()
+      local inp = torch.Tensor(1,1,3)
+      -- test vector:
+      local hsls = { {0,0,0},
+                     {0,0,1},
+                     {0,1,0},
+                     {90,0.2,0.5},
+                     {180,0.2,0.5},
+                     {270,0.2,0.5},
+                     {0,0.4,0.5},
+                     {90,0.4,0.5},
+                     {180,0.4,0.5},
+                     {270,0.4,0.5},
+                     {0,0.7,0.5},
+                     {90,0.7,0.5},
+                     {180,0.7,0.5},
+                     {270,0.7,0.5} }
+      -- test all:
+      print('+++ testing HSV to RGB conversion +++')
+      for i,hsl in ipairs(hsls) do
+         inp[1][1][1] = hsl[1]
+         inp[1][1][2] = hsl[2]
+         inp[1][1][3] = hsl[3]
+         local rgb = image.hsl2rgb(inp)
+         local r = math.floor(rgb[1][1][1]*255 + 0.5)
+         local g = math.floor(rgb[1][1][2]*255 + 0.5)
+         local b = math.floor(rgb[1][1][3]*255 + 0.5)
+         print('hsl = ' .. hsl[1] .. 'd  ' .. hsl[2]*100 .. '%  ' .. hsl[3]*100 .. '%')
+         print('rgb = ' .. r .. '  ' .. g .. '  ' .. b)
+         print('')
+      end
+      print('--- testing HSV to RGB done ---')
    end
 
 

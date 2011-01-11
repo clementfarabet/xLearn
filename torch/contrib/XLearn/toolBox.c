@@ -42,6 +42,60 @@ int image_threshold(lua_State *L) {
   return 1;
 }
 
+int image_maskToRGB(lua_State *L) {
+  THTensor *mask = luaT_checkudata(L, 1, 
+				   luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *colorMap = luaT_checkudata(L, 2, 
+				       luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *rgbmap = luaT_checkudata(L, 3, 
+				     luaT_checktypename2id(L, "torch.Tensor"));
+
+  double * data_mask = mask->storage->data+ mask->storageOffset;
+  double * data_colorMap = colorMap->storage->data+ colorMap->storageOffset; 
+  double * data_rgbmap = rgbmap->storage->data+ rgbmap->storageOffset;
+
+  int c_size_0 = colorMap->size[0];
+  int c_size_1 = colorMap->size[1];
+  int c_size_2 = colorMap->size[2];
+
+  int m_size_0 = mask->size[0];
+  int m_size_1 = mask->size[1];
+  int m_size_2 = mask->size[2];
+
+  int r_size_0 = rgbmap->size[0];
+  int r_size_1 = rgbmap->size[1];
+  int r_size_2 = rgbmap->size[2];
+
+  //DEBUG
+  // printf("colorMap sizes: %d, %d, %d\n", c_size_0, c_size_1, c_size_2);
+  //printf("mask sizes: %d, %d, %d\n", m_size_0, m_size_1, m_size_2);
+  //printf("rgbmap sizes: %d, %d, %d\n", r_size_0, r_size_1, r_size_2);
+
+  int k, i,j;
+  int pointer = 0;
+  /* for (i = 0; i < mask->size[0]; i++){ */
+/*     for(j = 0; j < mask->size[1]; j ++){ */
+/*       int mask_i = data_mask[pointer]; */
+/*       printf("i = %d, j = %d, mask[i,j] = %d\n", i, j, mask_i); */
+/*       pointer++; */
+      
+/*     } */
+/*   } */
+  int size = mask->size[0]*mask->size[1];
+  for(k = 0; k < 3; k++ ){
+    for(pointer = 0; pointer < size; pointer++){
+      int mask_i = data_mask[pointer];
+      //DEBUG
+      //printf("k = %d, pointer = %d,mask_i = %d, colorMap[mask_i] = %f\n",
+      // 	     k, pointer, mask_i, data_colorMap[k*c_size_0 + mask_i - 1]);
+      
+      data_rgbmap[k*size + pointer] = data_colorMap[k*c_size_0 + mask_i - 1];
+    }
+  }
+  return 1;  
+}
+
+
 int image_lower(lua_State *L) {
   THTensor *input = luaT_checkudata(L, 1, 
                                     luaT_checktypename2id(L, "torch.Tensor"));

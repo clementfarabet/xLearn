@@ -121,8 +121,7 @@ local layers_table = {
 
    ["nn.HardTanh"] =
       function(net_compiler, module, inputs) 
-         print(message.WARNING_IMPLEMENTED, module)
-         return inputs
+         return net_compiler:Mapping(module,inputs,'HardTanh')
       end,
 
    ["nn.StdSigm"] =
@@ -245,6 +244,10 @@ function Compiler:processNetwork(network, inputs)
                mapping = 'Tanh'
                io.write(' merged with next layers > '..module_1..' >>> '..module_name)
                doneAdvance = 1
+            elseif module_0 == 'nn.SpatialConvolution' and module_1 == 'nn.HardTanh' then
+               mapping = 'HardTanh'
+               io.write(' merged with next layers > '..module_1..' >>> '..module_name)
+               doneAdvance = 1
             elseif module_0 == 'nn.SpatialSubSampling' and module_1 == 'nn.Tanh' then
                mapping = 'Tanh'
                io.write(' merged with next layers > '..module_1..' >>> '..module_name)
@@ -263,6 +266,10 @@ function Compiler:processNetwork(network, inputs)
                doneAdvance = 2
             elseif module_0 == 'nn.SpatialConvolutionTable' and module_1 == 'nn.Tanh' then
                mapping = 'Tanh'
+               io.write(' merged with next layers > '..module_1..' >>> '..module_name)
+               doneAdvance = 1
+            elseif module_0 == 'nn.SpatialConvolutionTable' and module_1 == 'nn.HardTanh' then
+               mapping = 'HardTanh'
                io.write(' merged with next layers > '..module_1..' >>> '..module_name)
                doneAdvance = 1
             elseif module_0 == 'nn.SpatialConvolutionTable' and module_1 == 'nn.Mult' 
@@ -746,7 +753,7 @@ function Compiler:SpatialSubSampling(sub_module, inputs, mapping)
          local output_height = (self.core.mem.buff[inputs[o]].orig_h-sub_module.kH)/sub_module.dH + 1
          if output_height ~= math.floor(output_height) then
             error('# ERROR <Compiler> : inconsistent subsampling ratios in_h=' .. item.orig_h .. ', sub_h=' .. 
-               conv_module.kH .. ', out_h=' .. output_height)
+               sub_module.kH .. ', out_h=' .. output_height)
          end
          local id_output = self.core.mem:allocOnTheHeap(output_height, output_width, {}, new_layer)
          outputs[o] = id_output
@@ -956,6 +963,8 @@ function Compiler:getCoefs(mapping)
 			nbSegments=grid.mapper_segs, Q=num.frac_,
 			verbose=true, epsilon = 19.7/256, error_type = 0,
 			name = type}
+   elseif type == 'HardTanh' then
+      coefs=math.HardTanh{nbSegments=grid.mapper_segs}
    else
       error('# ERROR <Compiler> : unknown mapping')
    end

@@ -24,6 +24,7 @@ extern int toolbox_getMicroTime(lua_State *L);
 extern int toolbox_spatialDist(lua_State *L);
 
 extern int toolbox_dist2vectors(lua_State *L);
+extern int image_maskToRGB(lua_State *L);
 
 /*
 extern int toolbox_ncursePrint(lua_State *L);
@@ -47,6 +48,7 @@ static const struct luaL_reg extraroutines [] = {
   {"spatialDist", toolbox_spatialDist},
   {"createTable", toolbox_createTable},
   {"Dist2",toolbox_dist2vectors},
+  {"image_maskToRGB", image_maskToRGB},
   /*
   {"ncurseStart", toolbox_ncurseStart},
   {"ncurseEnd", toolbox_ncurseEnd},
