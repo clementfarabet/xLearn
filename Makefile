@@ -55,7 +55,10 @@ help:
 	@-echo "    $ [sudo] make update"
 	@-echo ""
 	@-echo "  root install, including all tools for the neuFlow arch [linux only]"
-	@-echo "    $ sudo make USE_NEUFLOW=1 USE_OPENCV=1 install"
+	@-echo "    $ sudo make USE_NEUFLOW=1 USE_V4L2=1 install"
+	@-echo ""
+	@-echo "  root install, including 3rd Party algos, and efficient LuaJIT interpreter [linux only]"
+	@-echo "    $ sudo make USE_3RDPARTY=1 USE_LUAJIT=1 install"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
 build: camiface luajit xflow
