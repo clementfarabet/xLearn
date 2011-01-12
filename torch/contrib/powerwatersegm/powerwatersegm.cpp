@@ -63,7 +63,10 @@ knowledge of the CeCILL license and that you accept its terms.
 
 
 /* =============================================================== */
-void tensor_to_image(THTensor *tensor, struct xvimage **r, struct xvimage **g, struct xvimage **b)
+void tensor_to_image(THTensor *tensor, 
+                     struct xvimage **r, 
+                     struct xvimage **g, 
+                     struct xvimage **b)
 /* =============================================================== */
 {
   // idx
@@ -71,7 +74,7 @@ void tensor_to_image(THTensor *tensor, struct xvimage **r, struct xvimage **g, s
 
   if (tensor->size[2] == 1) {
     // 1 channel
-    *r = allocimage(NULL, tensor->size[1], tensor->size[0], 1, VFF_TYP_1_BYTE);    
+    *r = allocimage(NULL, tensor->size[0], tensor->size[1], 1, VFF_TYP_1_BYTE);    
 
     // img p
     uint8_t *rp = UCHARDATA(*r);
@@ -85,21 +88,21 @@ void tensor_to_image(THTensor *tensor, struct xvimage **r, struct xvimage **g, s
     }
   } else { 
     // should be 3 channels
-    *r = allocimage(NULL, tensor->size[1], tensor->size[0], 1, VFF_TYP_1_BYTE);
-    *g = allocimage(NULL, tensor->size[1], tensor->size[0], 1, VFF_TYP_1_BYTE);
-    *b = allocimage(NULL, tensor->size[1], tensor->size[0], 1, VFF_TYP_1_BYTE);
+    *r = allocimage(NULL, tensor->size[0], tensor->size[1], 1, VFF_TYP_1_BYTE);
+    *g = allocimage(NULL, tensor->size[0], tensor->size[1], 1, VFF_TYP_1_BYTE);
+    *b = allocimage(NULL, tensor->size[0], tensor->size[1], 1, VFF_TYP_1_BYTE);
 
     // img p
     uint8_t *rp = UCHARDATA(*r);
-    uint8_t *gp = UCHARDATA(*r);
-    uint8_t *bp = UCHARDATA(*r);
+    uint8_t *gp = UCHARDATA(*g);
+    uint8_t *bp = UCHARDATA(*b);
 
     // copy data
     for (i1=0; i1<tensor->size[1]; i1++) {
       for (i0=0; i0<tensor->size[0]; i0++) {
         *rp = (uint8_t)(THTensor_get3d(tensor, i0, i1, 0) * 255);
-        *gp = (uint8_t)(THTensor_get3d(tensor, i0, i1, 0) * 255);
-        *bp = (uint8_t)(THTensor_get3d(tensor, i0, i1, 0) * 255);
+        *gp = (uint8_t)(THTensor_get3d(tensor, i0, i1, 1) * 255);
+        *bp = (uint8_t)(THTensor_get3d(tensor, i0, i1, 2) * 255);
         rp++; gp++; bp++;
       }
     }
@@ -107,11 +110,12 @@ void tensor_to_image(THTensor *tensor, struct xvimage **r, struct xvimage **g, s
 }
 
 /* =============================================================== */
-void image_to_tensor(struct xvimage *img, THTensor **tensor)
+void image_to_tensor(struct xvimage *img, 
+                     THTensor **tensor)
 /* =============================================================== */
 {
   // create output
-  *tensor = THTensor_newWithSize3d(colsize(img), rowsize(img), 1);
+  *tensor = THTensor_newWithSize3d(rowsize(img), colsize(img), 1);
 
   // get pointer to img data
   uint8_t *ip = UCHARDATA(img);
@@ -120,7 +124,7 @@ void image_to_tensor(struct xvimage *img, THTensor **tensor)
   int i1,i0;
   for (i1=0; i1<(*tensor)->size[1]; i1++) {
     for (i0=0; i0<(*tensor)->size[0]; i0++) {
-      THTensor_set3d(*tensor, i0, i1, 0, ((double)(*ip)) / 255.0);
+      THTensor_set3d(*tensor, i0, i1, 0, ((double)(*ip)));// / 255.0);
       ip++;
     }
   }
@@ -176,7 +180,7 @@ int power_lua(lua_State *L)
     x = (int)THTensor_get2d(ten_seeds, j, 0);
     y = (int)THTensor_get2d(ten_seeds, j, 1);
     index_labels[j] = (int)THTensor_get2d(ten_seeds, j, 2);
-    index_seeds[j] = x + y*cs;
+    index_seeds[j] = x + y*rs;
     if (index_labels[j] > nblabels) nblabels = index_labels[j];
   }
   int size_seeds = ten_seeds->size[0];
@@ -192,11 +196,13 @@ int power_lua(lua_State *L)
       uint32_t * weights = (uint32_t *)malloc(sizeof(uint32_t)*M);
       int max_weight = 255;
       if (color == true) 
-	max_weight = color_standard_weights( image_r, image_v, image_b, weights, edges, index_seeds, size_seeds, geod, quicksort);
+	max_weight = color_standard_weights( image_r, image_v, image_b, weights, 
+                                             edges, index_seeds, size_seeds, geod, quicksort);
       else 
 	grey_weights(image_r, weights, edges,index_seeds, size_seeds, geod, quicksort);
 
-      output = MSF_Kruskal(edges,weights, max_weight, index_seeds, index_labels, size_seeds, rs, cs, ds, nblabels);
+      output = MSF_Kruskal(edges,weights, max_weight, index_seeds, index_labels, 
+                           size_seeds, rs, cs, ds, nblabels);
       free(weights);
     }
  
@@ -205,7 +211,8 @@ int power_lua(lua_State *L)
       printf("# exec Prim RB tree with %0d seeds\n", size_seeds);
       uint32_t * weights = (uint32_t *)malloc(sizeof(uint32_t)*M);
       if (color == true) 
-        color_standard_weights( image_r, image_v, image_b, weights, edges, index_seeds, size_seeds, geod, quicksort);
+        color_standard_weights( image_r, image_v, image_b, weights, edges, index_seeds, 
+                                size_seeds, geod, quicksort);
       else 
 	grey_weights(image_r, weights, edges,index_seeds, size_seeds, geod, quicksort);
       output = MSF_Prim(edges,weights, index_seeds, index_labels, size_seeds,rs, cs, ds, nblabels);
@@ -220,18 +227,27 @@ int power_lua(lua_State *L)
       uint32_t * normal_weights ;
       uint32_t max_weight = 255;
       if (color == true) 
-	normal_weights = color_standard_weights_PW( image_r, image_v, image_b, weights, edges, index_seeds, size_seeds, &max_weight, quicksort);
-      else normal_weights = grey_weights_PW(image_r, edges,index_seeds, size_seeds, weights, quicksort);
+	normal_weights = color_standard_weights_PW( image_r, image_v, image_b, weights, edges, 
+                                                    index_seeds, size_seeds, &max_weight, 
+                                                    quicksort);
+      else normal_weights = grey_weights_PW(image_r, edges,index_seeds, 
+                                            size_seeds, weights, quicksort);
+
+      img_proba = allocimage(NULL, rs, cs, ds, VFF_TYP_1_BYTE);
+
       if (geod ==true)
-	output = PowerWatershed_q2(edges, weights, weights, max_weight,index_seeds, index_labels, size_seeds,rs, cs, ds, nblabels, quicksort, img_proba);
+	output = PowerWatershed_q2(edges, weights, weights, max_weight,index_seeds, index_labels, 
+                                   size_seeds,rs, cs, ds, nblabels, quicksort, img_proba);
       else
-	output = PowerWatershed_q2(edges, weights, normal_weights,max_weight,index_seeds, index_labels, size_seeds,rs, cs, ds, nblabels, quicksort, img_proba);
+	output = PowerWatershed_q2(edges, weights, normal_weights,max_weight,index_seeds, 
+                                   index_labels, size_seeds,rs, cs, ds, nblabels, 
+                                   quicksort, img_proba);
       free(weights);
       free(normal_weights);
     }
 
   assert(output != NULL);
- 
+
   // return result
   THTensor *ten_mask = NULL;
   image_to_tensor(output, &ten_mask);

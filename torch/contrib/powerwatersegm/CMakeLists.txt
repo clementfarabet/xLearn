@@ -65,7 +65,7 @@ SET(src cs.h
         union_find.cpp
         union_find.h )
 
-SET(luasrc init.lua)
+SET(luasrc init.lua mountains.png)
 
 ADD_TORCH_PACKAGE(powerwatersegm "${src}" "${luasrc}")
 TARGET_LINK_LIBRARIES(powerwatersegm luaT TH csparse)
