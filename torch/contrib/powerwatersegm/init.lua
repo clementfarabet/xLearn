@@ -46,6 +46,7 @@
 -- Camille Couprie, Leo Grady, Laurent Najman, Hugues Talbot,
 -- "Power Watershed: A Unifying Graph-Based Optimization Framework",
 -- PAMI, 2010
+-- http://www.esiee.fr/~coupriec/code.html
 --
 -- The code has been modified in several aspects, to accomodoate Torch.
 --
@@ -62,6 +63,7 @@ of seeds.
 The map is computed using power watersheds, as described in
 "Power Watershed: A Unifying Graph-Based Optimization Framework", by
 Camille Couprie, Leo Grady, Laurent Najman, Hugues Talbot.
+http://www.esiee.fr/~coupriec/code.html
 
 The input image must be a WxHxN tensor, where N is the number
 of channels (colors). N must be 3 or 1.
