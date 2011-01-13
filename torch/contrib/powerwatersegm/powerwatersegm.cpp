@@ -192,7 +192,7 @@ int power_lua(lua_State *L)
 
    if (algo == 1) // Kruskal
     {
-      printf("# exec Kruskal with %0d seeds\n", size_seeds);
+      //printf("# exec Kruskal with %0d seeds\n", size_seeds);
       uint32_t * weights = (uint32_t *)malloc(sizeof(uint32_t)*M);
       int max_weight = 255;
       if (color == true) 
@@ -208,7 +208,7 @@ int power_lua(lua_State *L)
  
   else if (algo == 3) // Prim RB tree
     {  
-      printf("# exec Prim RB tree with %0d seeds\n", size_seeds);
+      //printf("# exec Prim RB tree with %0d seeds\n", size_seeds);
       uint32_t * weights = (uint32_t *)malloc(sizeof(uint32_t)*M);
       if (color == true) 
         color_standard_weights( image_r, image_v, image_b, weights, edges, index_seeds, 
@@ -221,7 +221,7 @@ int power_lua(lua_State *L)
 
  else if (algo == 2) // Kruskal & RW on plateaus multiseeds linear time
     {
-      printf("# exec Kruskal (& RW on plateaus) with %0d seeds\n", size_seeds);
+      //printf("# exec Kruskal (& RW on plateaus) with %0d seeds\n", size_seeds);
       struct xvimage * img_proba;     
       uint32_t * weights = (uint32_t *)malloc(sizeof(uint32_t)*M);
       uint32_t * normal_weights ;

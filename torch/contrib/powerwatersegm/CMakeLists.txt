@@ -1,4 +1,5 @@
 
+SET(CMAKE_C_FLAGS "-fpic")
 ADD_LIBRARY( csparse STATIC
         cs.h
         cs_add.c
