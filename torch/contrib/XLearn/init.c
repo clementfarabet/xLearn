@@ -12,9 +12,16 @@ extern void nn_LcEncoder_init(lua_State *L);
 extern void nn_LcDecoder_init(lua_State *L);
 extern void nn_Threshold_init(lua_State *L);
 extern void nn_SparseCriterion_init(lua_State *L);
+
 extern int image_saturate(lua_State *L);
 extern int image_threshold(lua_State *L);
 extern int image_lower(lua_State *L);
+extern int image_maskToRGB(lua_State *L);
+extern int image_rgb2hsl(lua_State *L);
+extern int image_hsl2rgb(lua_State *L);
+extern int image_rgb2hsv(lua_State *L);
+extern int image_hsv2rgb(lua_State *L);
+
 extern int toolbox_usleep(lua_State *L);
 extern int toolbox_fillTensor(lua_State *L);
 extern int toolbox_fillFloatTensor(lua_State *L);
@@ -22,9 +29,7 @@ extern int toolbox_fillByteTensor(lua_State *L);
 extern int toolbox_createTable(lua_State *L);
 extern int toolbox_getMicroTime(lua_State *L);
 extern int toolbox_spatialDist(lua_State *L);
-
 extern int toolbox_dist2vectors(lua_State *L);
-extern int image_maskToRGB(lua_State *L);
 
 /*
 extern int toolbox_ncursePrint(lua_State *L);
@@ -49,6 +54,10 @@ static const struct luaL_reg extraroutines [] = {
   {"createTable", toolbox_createTable},
   {"Dist2",toolbox_dist2vectors},
   {"image_maskToRGB", image_maskToRGB},
+  {"rgb2hsl", image_rgb2hsl},
+  {"hsl2rgb", image_hsl2rgb},
+  {"rgb2hsv", image_rgb2hsv},
+  {"hsv2rgb", image_hsv2rgb},
   /*
   {"ncurseStart", toolbox_ncurseStart},
   {"ncurseEnd", toolbox_ncurseEnd},

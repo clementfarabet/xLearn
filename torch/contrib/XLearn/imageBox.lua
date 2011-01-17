@@ -217,30 +217,20 @@ do
    -- image.display(input, scale=1, title='Image Display')    
    -- display 2D tensor
    --
-   function image.display(input, ...) -- opts scale,title,win
+   function image.display(...)
       -- usage
-      if not image.display_usage then
-         image.display_usage = toolBox.usage('image.display',
-                                             'displays a single image, with optional saturation/zoom',
-                                             nil,
-                             {type='torch.Tensor', help='image, (WxHx1 or WxHx3 or WxH)', req=true},
-                             {type='number', help='display zoom'},
-                             {type='number', help='lower-bound for range'},
-                             {type='number', help='upper-bound for range'},
-                             {type='gfx.Window', help='window descriptor'},
-                             {type='string', help='legend'})
-      end
-
-      -- Parse Args
-      if not input or type(input) ~= 'userdata' then 
-         error(image.display_usage)
-      end
-      local arg = {...}
-      local zoom = arg[1] or 1
-      local min = arg[2]
-      local max = arg[3]
-      local w = arg[4]
-      local legend = arg[5] or 'image.display'
+      local _, input, zoom, min, max, w, legend = toolBox.unpack(
+         {...},
+         'image.display',
+         'displays a single image, with optional saturation/zoom;\n'
+            .. 'if the nb of channels is other than 1 or 3, then image.displayList() is called',
+         {arg='image', type='torch.Tensor', help='image, (WxHx1 or WxHx3 or WxH)', req=true},
+         {arg='zoom', type='number', help='display zoom', default=1},
+         {arg='min', type='number', help='lower-bound for range'},
+         {arg='max', type='number', help='upper-bound for range'},
+         {arg='win', type='gfx.Window', help='window descriptor'},
+         {arg='legend', type='string', help='legend', default='image.display'}
+      )
 
       if input:nDimension() == 2 or input:size(3) == 1 or input:size(3) == 3 then
          -- Rescale range
@@ -253,8 +243,8 @@ do
 
          -- blit
          w:blit(myIn, zoom)
-
-      else -- multichanel image (collection of images/features)
+      else 
+         -- multichanel image (collection of images/features)
          w = image.displayList{images=input, zoom=zoom, min=min, max=max, window=w, legend=legend}
       end
 
@@ -286,36 +276,26 @@ do
    --- Returns a gaussian kernel.
    -- The default parameters generate that occupies the entire kernel.
    --
-   function image.gaussian(args)
-      -- usage
-      if not image.gaussian_usage then
-         image.gaussian_usage = 
-            toolBox.usage('image.gaussian',
-                          'returns a 2D gaussian kernel',
-                          nil,
-            {arg='amplitude', type='number', help='Amplitute of the gaussian (max value)'},
-            {arg='normalize', type='number', help='Normalize kernel (cannot be used with Amplitude)'},
-            {arg='width', type='number', help='Width and Height of the kernel'},
-            {arg='width_x', type='number', help='Width of the kernel'},
-            {arg='width_y', type='number', help='Height of the kernel'},
-            {arg='sigma', type='number', help='Sigma (x and y)'},
-            {arg='sigma_x', type='number', help='Sigma, x'},
-            {arg='sigma_y', type='number', help='Sigma, y'},
-            {arg='center', type='number', help='Center of the gaussian'},
-            {arg='center_x', type='number', help='Center (x) of the gaussian.'},
-            {arg='center_y', type='number', help='Center (y) of the gaussian.'})
-      end
+   function image.gaussian(...)
+      -- process args
+      local _, width, sigma, amplitude, normalize, 
+      width_x, width_y, sigma_x, sigma_y = toolBox.unpack(
+         {...},
+         'image.gaussian',
+         'returns a 2D gaussian kernel',
+         {arg='width', type='number', help='Width and Height of the kernel', default=3},
+         {arg='sigma', type='number', help='Sigma (x and y)', default=0.25},
+         {arg='amplitude', type='number', help='Amplitute of the gaussian (max value)', default=1},
+         {arg='normalize', type='number', help='Normalize kernel (exc Amplitude)', default=false},
+         {arg='width_x', type='number', help='Width of the kernel', defaulta='width'},
+         {arg='width_y', type='number', help='Height of the kernel', defaulta='width'},
+         {arg='sigma_x', type='number', help='Sigma, x', defaulta='sigma'},
+         {arg='sigma_y', type='number', help='Sigma, y', defaulta='sigma'}
+      )
 
-      -- parse args
-      local args = args or error(image.gaussian_usage)
-      local amplitude = args.amplitude or 1
-      local normalize = args.normalize or false
-      local width_x = args.width_x or args.width or 3
-      local width_y = args.width_y or args.width or 3
-      local sigma_x = args.sigma_x or args.sigma or 0.25
-      local sigma_y = args.sigma_y or args.sigma or 0.25
-      local center_x = args.center_x or args.center or math.ceil(width_x/2)
-      local center_y = args.center_y or args.center or math.ceil(width_y/2)
+      -- local vars
+      local center_x = math.ceil(width_x/2)
+      local center_y = math.ceil(width_y/2)
 
       -- generate kernel
       local gauss = torch.Tensor(width_x, width_y)
@@ -390,32 +370,28 @@ do
    -- loads arbitrary videos, using FFMPEG (and a temp jpeg cache)
    -- returns a table (list) of images
    --
-   function image.loadVideo(path,w,h,fps,length,channel)
+   function image.loadVideo(...)
       -- usage
-      if not image.loadVideo_usage then
-         image.loadVideo_usage = toolBox.usage('image.loadVideo',
-                                     'loads a video into a table of tensors:\n'
-                                        .. ' + relies on ffpmeg, which must be installed\n'
-                                        .. ' + creates a local scratch/ to hold jpegs',
-                                        nil,
-                                        {type='string', help='path to video', req=true},
-                                        {type='number', help='width [default=500]'},
-                                        {type='number', help='height [default=376]'},
-                                        {type='number', help='frames per second [default=5]'},
-                                        {type='number', help='length, in seconds [default=MAX]'},
-                                        {type='number', help='video channel [default=0]'})
-      end
+      local _, path, w, h, fps, length, channel, list = toolBox.unpack(
+         {...},
+         'image.loadVideo',
+         'loads a video into a table of tensors:\n'
+            .. ' + relies on ffpmeg, which must be installed\n'
+            .. ' + creates a local scratch/ to hold jpegs',
+         {arg='path', type='string', help='path to video', req=true},
+         {arg='width', type='number', help='width', default=500},
+         {arg='height', type='number', help='height', default=376},
+         {arg='fps', type='number', help='frames per second', default=5},
+         {arg='length', type='number', help='length, in seconds', default=5},
+         {arg='channel', type='number', help='video channel', default=0},
+         {arg='list', type='boolean', help='returns a list of jpg filenames', default=false}
+      )
 
       -- check ffmpeg existence
       local res = toolBox.exec('ffmpeg')
       if res:find('not found') then 
          local c = toolBox.COLORS
          error(c.Red .. 'ffmpeg required, please install it (apt-get install ffmpeg)' .. c.none)
-      end
-
-      -- check args
-      if not path then
-         error(image.loadVideo_usage)
       end
 
       -- make cache
@@ -426,10 +402,10 @@ do
 
       -- process video
       os.execute('ffmpeg -i ' .. path .. 
-                 ' -r ' .. (fps or 5) .. 
-                 ' -t ' .. (length or 1000000) ..
-                 ' -map 0.' .. (channel or 0) ..
-                 ' -s ' .. (w or '500') .. 'x' .. (h or '376') .. 
+                 ' -r ' .. fps .. 
+                 ' -t ' .. length ..
+                 ' -map 0.' .. channel ..
+                 ' -s ' .. w .. 'x' .. h .. 
                  ' -qscale 1' ..
                  ' ' .. paths.concat(path_cache,'frame-%04d.jpg'))
 
@@ -439,8 +415,11 @@ do
       for file in paths.files(path_cache) do
          if file ~= '.' and file ~= '..' then
             local fname = paths.concat(path_cache,string.format('frame-%04d.jpg',idx))
-            local img = image.load(fname)
-            table.insert(imgs,img)
+            if list then
+               table.insert(imgs, fname)
+            else
+               table.insert(imgs, image.load(fname))
+            end
             idx = idx + 1
          end
       end
@@ -457,29 +436,25 @@ do
    -- image.playVideo()
    -- plays a video (must have been loaded with loadVideo())
    --
-   function image.playVideo(seq,zoom,loop)
+   function image.playVideo(...)
       -- usage
-      if not image.playVideo_usage then
-         image.playVideo_usage = toolBox.usage('image.playVideo',
-                                     'plays a video:\n'
-                                        .. ' + video must have been loaded with image.loadVideo()\n'
-                                        .. ' + or else, it must be a list of tensors',
-                                        nil,
-                                        {type='table', help='list/table of images', req=true},
-                                        {type='number', help='zoom [default=1]'},
-                                        {type='boolean', help='loop [default=false]'})
-      end
-
-      if not seq then
-         error(image.playVideo_usage)
-      end
+      local _, seq, zoom, loop, fps = toolBox.unpack(
+         {...},
+         'image.playVideo',
+         'plays a video:\n'
+            .. ' + video must have been loaded with image.loadVideo()\n'
+            .. ' + or else, it must be a list of tensors',
+         {arg='seq', type='table', help='list/table of images', req=true},
+         {arg='zoom', type='number', help='zoom', default=1},
+         {arg='loop', type='boolean', help='loop', default=false},
+         {arg='fps', type='number', help='fps [default = given by seq.fps]'}
+      )
 
       -- plays vid
-      zoom = zoom or 1
       local p =  qtwidget.newwindow(seq[1]:size(1)*zoom,seq[1]:size(2)*zoom)
       local disp = Displayer()
       local frame = torch.Tensor()
-      local pause = 1 / (seq.fps or 5) - 0.03
+      local pause = 1 / (fps or seq.fps) - 0.03
       while true do
          for i,frameByte in ipairs(seq) do
             frame:resize(frameByte:size(1),frameByte:size(2),frameByte:size(3))
@@ -497,44 +472,33 @@ do
    -- loads arbitrary 3D videos, using FFMPEG (and a temp jpeg cache)
    -- returns a table (list) of pairs of images
    --
-   function image.loadVideo3D(path,w,h,fps,length,shift)
+   function image.loadVideo3D(...)
       -- usage
-      if not image.loadVideo3D_usage then
-         image.loadVideo3D_usage = toolBox.usage('image.loadVideo3D',
-                                     'loads a video into a table of tensors:\n'
-                                        .. ' + relies on ffpmeg, which must be installed\n'
-                                        .. ' + creates a local scratch/ to hold jpegs',
-                                        nil,
-                                        {type='string', help='path to video', req=true},
-                                        {type='number', help='width [default=500]'},
-                                        {type='number', help='height [default=375]'},
-                                        {type='number', help='frames per second [default=5]'},
-                                        {type='number', help='length, in seconds [default=MAX]'},
-                                        {type='number', help='realign: left shift right image by N pixels and crop [default=0]'})
-      end
-
-      -- check ffmpeg existence
-      local res = toolBox.exec('ffmpeg')
-      if res:find('not found') then 
-         local c = toolBox.COLORS
-         error(c.Red .. 'ffmpeg required, please install it (apt-get install ffmpeg)' .. c.none)
-      end
-
-      -- check args
-      if not path then
-         error(image.loadVideo3D_usage)
-      end
+      local _, path, w, h, fps, length, shift, list = toolBox.unpack(
+         {...},
+         'image.loadVideo3D',
+         'loads a video into a table of tensors:\n'
+            .. ' + relies on ffpmeg, which must be installed\n'
+            .. ' + creates a local scratch/ to hold jpegs',
+         {arg='path', type='string', help='path to video', req=true},
+         {arg='width', type='number', help='width', default=500},
+         {arg='height', type='number', help='height', default=376},
+         {arg='fps', type='number', help='frames per second', default=5},
+         {arg='length', type='number', help='length, in seconds', default=5},
+         {arg='realign', type='number', help='realign: left shift right image by N pixels and crop', default=0},
+         {arg='list', type='boolean', help='returns a list of jpg filenames', default=false}
+      )
 
       -- load channels separately and merge
-      local left = image.loadVideo(path,w,h,fps,length,0)
-      local right = image.loadVideo(path,w,h,fps,length,2)
+      local left = image.loadVideo(path,w,h,fps,length,0,list)
+      local right = image.loadVideo(path,w,h,fps,length,2,list)
       local pairs = {fps=left.fps}
       for i = 1,#left do
          pairs[i] = {left[i],right[i]}
       end
 
       -- optional shit
-      if shift then
+      if shift and not list then
          for i,pair in ipairs(pairs) do
             if shift > 0 then
                -- shit and crop right channel
@@ -558,31 +522,27 @@ do
    -- image.playVideo3D()
    -- plays a video (must have been loaded with loadVideo3D())
    --
-   function image.playVideo3D(seq,zoom,loop)
+   function image.playVideo3D(...)
       -- usage
-      if not image.playVideo3D_usage then
-         image.playVideo3D_usage = toolBox.usage('image.playVideo3D',
-                                     'plays a video:\n'
-                                        .. ' + video must have been loaded with image.loadVideo()\n'
-                                        .. ' + or else, it must be a list of pairs of tensors',
-                                        nil,
-                                        {type='table', help='list/table of images', req=true},
-                                        {type='number', help='zoom [default=1]'},
-                                        {type='boolean', help='loop [default=375]'})
-      end
-
-      if not seq then
-         error(image.playVideo3D_usage)
-      end
+      local _, seq, zoom, loop, fps = toolBox.unpack(
+         {...},
+         'image.playVideo3D',
+         'plays a video:\n'
+            .. ' + video must have been loaded with image.loadVideo()\n'
+            .. ' + or else, it must be a list of pairs of tensors',
+         {arg='seq', type='table', help='list/table of images', req=true},
+         {arg='zoom', type='number', help='zoom', default=1},
+         {arg='loop', type='boolean', help='loop', default=false},
+         {arg='fps', type='number', help='fps [default = given by seq.fps]'}
+      )
 
       -- plays vid
-      zoom = zoom or 1
       local p =  qtwidget.newwindow(seq[1][1]:size(1)*zoom,seq[1][1]:size(2)*zoom)
       local disp = Displayer()
       local framel = torch.Tensor()
       local framer = torch.Tensor()
       local frame = torch.Tensor()
-      local pause = 1 / (seq.fps or 5) - 0.08
+      local pause = 1 / (fps or seq.fps) - 0.08
       while true do
          for i,frameByte in ipairs(seq) do
             -- left
@@ -666,26 +626,37 @@ do
 
 
    ----------------------------------------------------------------------
-   --- Returns an histogram of values
-   -- @param tensor    tensor to analyse
+   --- computes an histogram of a given tensor
    --
-   function lab.hist(tensor)
+   function lab.hist(tensor,bins)
+      local bins = bins or 10
       local hist = {}
-      local hit = false
-      tensor:apply(function (x)
-                      for i=1,#hist do
-                         if hist[i].val == x then
-                            hist[i].nb = hist[i].nb + 1
-                            hit = true
-                            break
-                         end
-                      end
-                      if not hit then
-                         table.insert(hist, {val=x,nb=1})
-                      end
-                      hit = false
-                   end)
-      return hist
+      local ten = torch.Tensor():resizeAs(tensor):copy(tensor)
+      local min = ten:min()
+      local max = ten:max()
+      ten:add(-min):div(max):mul(bins - 1e-6):floor():add(1)
+      for i = 1,bins do
+         hist[i] = 0
+      end
+      ten:apply(function (x)
+                   hist[x] = hist[x] + 1
+                end)
+
+      -- cleanup hist
+      local cleanhist = {}
+      cleanhist.raw = lab.new(hist)[1]
+      local _,mx = lab.max(cleanhist.raw)
+      local _,mn = lab.min(cleanhist.raw)
+      cleanhist.bins = bins
+      cleanhist.binwidth = (max-min)/bins
+      for i = 1,bins do
+         cleanhist[i] = {}
+         cleanhist[i].val = min + (i-0.5)*cleanhist.binwidth
+         cleanhist[i].nb = hist[i]
+      end
+      cleanhist.max = cleanhist[mx[1]]
+      cleanhist.min = cleanhist[mn[1]]
+      return cleanhist
    end
 
 
@@ -779,41 +750,30 @@ do
    -- image.displayList()    
    -- displays a list of images
    --
-   function image.displayList(args)
+   function image.displayList(...)
       -- usage
-      if not image.displayList_usage then
-         image.displayList_usage = toolBox.usage('image.displayList',
-                                   'displays a list of images on a 2D grid;\n' ..
-                                      'the list can be given as a Lua table, or as a 3D tensor.',
-                                                 nil,
-                             {arg='images', type='table | torch.Tensor', help='images', req=true},
-                             {arg='zoom', type='number', help='display zoom'},
-                             {arg='min', type='number', help='lower-bound for range'},
-                             {arg='max', type='number', help='upper-bound for range'},
-                             {arg='offset_x', type='number', help='horizontal display offset'},
-                             {arg='offset_y', type='number', help='vertical display offset'},
-                             {arg='legend', type='string', help='window title'},
-                             {arg='legends', type='string', help='individual legends'},
-                             {arg='win_w', type='number', help='window width'},
-                             {arg='win_h', type='number', help='window height'},
-                             {arg='window', type='gfx.Window', help='window descriptor'})
-      end
+      local _, images, zoom, min, max, offset_x, offset_y, 
+      legend, legends, window, window_w, window_h = toolBox.unpack(
+         {...},
+         'image.displayList',
+         'displays a list of images on a 2D grid;\n' ..
+            'the list can be given as a Lua table, or as a 3D tensor.',
+         {arg='images', type='table | torch.Tensor', help='images', req=true},
+         {arg='zoom', type='number', help='display zoom', default=1},
+         {arg='min', type='number', help='lower-bound for range'},
+         {arg='max', type='number', help='upper-bound for range'},
+         {arg='offset_x', type='number', help='horizontal display offset', default=0},
+         {arg='offset_y', type='number', help='vertical display offset', default=0},
+         {arg='legend', type='string', help='window title', default='image.displayList'},
+         {arg='legends', type='string', help='individual legends'},
+         {arg='window', type='gfx.Window', help='window descriptor'},
+         {arg='win_w', type='number', help='window width', default=1000},
+         {arg='win_h', type='number', help='window height', default=700}
+      )
 
-      -- Parse Args
-      if not args or not args.images then 
-         error(image.displayList_usage)
-      end
-      local images = args.images
-      local zoom = args.zoom or 1
-      local min = args.min
-      local max = args.max
-      local offset_x = args.offset_x or 0
-      local offset_y = args.offset_y or 0
-      local legend = args.legend or 'image.displayList'
-      local legends = args.legends or {}
-      local window_w = args.win_w or 1000
-      local window_h = args.win_h or 700
-      local painter = args.window or gfx.Window(window_w, window_h, legend)
+
+      -- create painter
+      local painter = window or gfx.Window(window_w, window_h, legend)
 
       -- if images are in a tensor form, then create a list
       if type(images) == 'userdata' then
@@ -851,8 +811,8 @@ do
             max_height = 0
          end
          painter:blit(imageNormed, zoom, offset_x, offset_y)
-         if legends[i] then
-            boldtxt(legends[i], offset_x+5, offset_y+imageNormed:size(2)-3)
+         if legends and legends[i] then
+            boldtxt(legends[i], offset_x/zoom+5, offset_y+imageNormed:size(2)-3)
          end
          offset_x = offset_x + imageNormed:size(1)*zoom
          if imageNormed:size(2) > max_height then
@@ -1765,6 +1725,23 @@ do
 
 
    ----------------------------------------------------------------------
+   -- image.rgb2hsl(image)
+   -- converts an RGB image to HSL
+   --
+   function image.rgb2hsl(input, ...)
+      local arg = {...}
+      local output = arg[1] or torch.Tensor()
+
+      -- resize and compute
+      output:resizeAs(input)
+      libxlearn.rgb2hsl(input,output)
+
+      -- return HSL image
+      return output
+   end
+
+
+   ----------------------------------------------------------------------
    -- image.hsl2rgb(image)
    -- converts an HSL image to RGB
    --
@@ -1772,135 +1749,73 @@ do
       local arg = {...}
       local output = arg[1] or torch.Tensor()
 
-      -- resize
+      -- resize and compute
       output:resizeAs(input)
+      libxlearn.hsl2rgb(input,output)
 
-      -- temp variables
-      local img = input:select(3,1)
-      local chroma = torch.Tensor():resizeAs(img)
-      local huep = torch.Tensor():resizeAs(img)
-      local huepdiv2 = torch.Tensor():resizeAs(img)
-      local X = torch.Tensor():resizeAs(img)
-      local m = torch.Tensor():resizeAs(img)
-      local R = torch.Tensor():resizeAs(img)
-      local G = torch.Tensor():resizeAs(img)
-      local B = torch.Tensor():resizeAs(img)
-
-      -- input chanels
-      local inputH = input:select(3,1)
-      local inputS = input:select(3,2)
-      local inputL = input:select(3,3)
-
-      -- output chanels
-      local outputRed = output:select(3,1)
-      local outputGreen = output:select(3,2)
-      local outputBlue = output:select(3,3)
-
-      -- compute intermediate values
-      chroma:copy(inputL):mul(2):add(-1):abs():mul(-1):add(1):cmul(inputS)
-      huep:copy(inputH):div(60)
-      huepdiv2:copy(huep):div(2):floor():mul(2)
-      X:copy(huepdiv2):mul(-1):add(huep)
-      X:add(-1):abs():mul(-1):add(1):cmul(chroma)
-
-      -- compute unnormalized R,G,B
-      R:copy(huep)
-      R:map2(chroma, X, function (h, c, x)
-                           if h < 1 then
-                              return c
-                           elseif h < 2 then
-                              return x
-                           elseif h < 3 then
-                              return 0
-                           elseif h < 4 then
-                              return 0
-                           elseif h < 5 then
-                              return x
-                           elseif h < 6 then
-                              return c
-                           else
-                              return 0
-                           end
-                        end)
-      G:copy(huep)
-      G:map2(chroma, X, function (h, c, x)
-                           if h < 1 then
-                              return x
-                           elseif h < 2 then
-                              return c
-                           elseif h < 3 then
-                              return c
-                           elseif h < 4 then
-                              return x
-                           elseif h < 5 then
-                              return 0
-                           elseif h < 6 then
-                              return 0
-                           else
-                              return 0
-                           end
-                        end)
-      B:copy(huep)
-      B:map2(chroma, X, function (h, c, x)
-                           if h < 1 then
-                              return 0
-                           elseif h < 2 then
-                              return 0
-                           elseif h < 3 then
-                              return x
-                           elseif h < 4 then
-                              return c
-                           elseif h < 5 then
-                              return c
-                           elseif h < 6 then
-                              return x
-                           else
-                              return 0
-                           end
-                        end)
-
-      -- postprocess
-      m:copy(chroma):mul(-0.5):add(inputL)
-      outputRed:copy(R):add(m)
-      outputGreen:copy(G):add(m)
-      outputBlue:copy(B):add(m)
-
-      -- return RGB image
+      -- return HSL image
       return output
    end
 
-   function image.test_hsl2rgb()
-      local inp = torch.Tensor(1,1,3)
-      -- test vector:
-      local hsls = { {0,0,0},
-                     {0,0,1},
-                     {0,1,0},
-                     {90,0.2,0.5},
-                     {180,0.2,0.5},
-                     {270,0.2,0.5},
-                     {0,0.4,0.5},
-                     {90,0.4,0.5},
-                     {180,0.4,0.5},
-                     {270,0.4,0.5},
-                     {0,0.7,0.5},
-                     {90,0.7,0.5},
-                     {180,0.7,0.5},
-                     {270,0.7,0.5} }
-      -- test all:
-      print('+++ testing HSV to RGB conversion +++')
-      for i,hsl in ipairs(hsls) do
-         inp[1][1][1] = hsl[1]
-         inp[1][1][2] = hsl[2]
-         inp[1][1][3] = hsl[3]
-         local rgb = image.hsl2rgb(inp)
-         local r = math.floor(rgb[1][1][1]*255 + 0.5)
-         local g = math.floor(rgb[1][1][2]*255 + 0.5)
-         local b = math.floor(rgb[1][1][3]*255 + 0.5)
-         print('hsl = ' .. hsl[1] .. 'd  ' .. hsl[2]*100 .. '%  ' .. hsl[3]*100 .. '%')
-         print('rgb = ' .. r .. '  ' .. g .. '  ' .. b)
-         print('')
-      end
-      print('--- testing HSV to RGB done ---')
+
+   ----------------------------------------------------------------------
+   -- image.rgb2hsv(image)
+   -- converts an RGB image to HSV
+   --
+   function image.rgb2hsv(input, ...)
+      local arg = {...}
+      local output = arg[1] or torch.Tensor()
+
+      -- resize and compute
+      output:resizeAs(input)
+      libxlearn.rgb2hsv(input,output)
+
+      -- return HSV image
+      return output
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.hsv2rgb(image)
+   -- converts an HSV image to RGB
+   --
+   function image.hsv2rgb(input, ...)
+      local arg = {...}
+      local output = arg[1] or torch.Tensor()
+
+      -- resize and compute
+      output:resizeAs(input)
+      libxlearn.hsv2rgb(input,output)
+
+      -- return HSV image
+      return output
+   end
+
+
+   ----------------------------------------------------------------------
+   -- image.test_conversions(image)
+   -- tests/validates conversions
+   --
+   function image.test_conversions()
+      print('+++ testing image conversions +++')
+
+      -- test 1
+      local rgb = image.lena()
+      local res = image.hsl2rgb(image.rgb2hsl(rgb))
+      local err = (rgb-res):abs():max()
+      print('RGB->HSL->RGB: max error = ' .. err)
+
+      -- test 2
+      res = image.hsv2rgb(image.rgb2hsv(rgb))
+      err = (rgb-res):abs():max()
+      print('RGB->HSV->RGB: max error = ' .. err)
+
+      -- test 3
+      res = image.yuv2rgb(image.rgb2yuv(rgb))
+      err = (rgb-res):abs():max()
+      print('RGB->YUV->RGB: max error = ' .. err)
+
+      print('--- testing done ---')
    end
 
 
@@ -2065,5 +1980,4 @@ do
          painter:image():save(dumpfile)
       end
    end
-
 end -- global do for local var purpose

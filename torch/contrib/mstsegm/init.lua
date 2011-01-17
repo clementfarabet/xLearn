@@ -37,7 +37,7 @@ The map is computed using MST (minimum spanning tree) ideas,
 as presented in "Efficient Graph-Based Image Segmentation", by
 Pedro F. Felzenszwalb and Daniel P. Huttenlocher.
 
-The input image must be a WxHxN tensor, where N is the number
+The input image must be a WxHx3 tensor, where 3 is the number
 of channels (colors).]]
 
 if not mstsegmLoaded then
@@ -45,24 +45,20 @@ if not mstsegmLoaded then
    mstsegm = {}
 
    -- register functions
-   mstsegm.infer = function(args)
-                      args = args or {}
-                      local img = args.image
-                      local sigma = args.sigma or 0.8
-                      local k = args.k or 500
-                      local min = args.min or 20
-                      if not img or img:nDimension() ~= 3 or img:size(3) ~= 3 then
-                         error( toolBox.usage('mstsegm.infer',
-                               infer_help_desc,
-                               nil,
-                               {arg='image', type='torch.Tensor', help='input image [WxHxN tensor]'},
-                               {arg='sigma', type='number', help='gaussian for preprocessing [default=0.8]'},
-                               {arg='k', type='number', help='thresholding parameter, a large k enforces larger segmentation areas [default=500]'},
-                               {arg='min', type='number', help='min parameter [default=20]'})
-                            )
-                     end
-                     return libmstsegm.infer(img, sigma, k, min)
-                  end
+   mstsegm.infer = function(...)
+                      local args, img, sigma, k, min = toolBox.unpack(
+                         {...},
+                         'mstsegm.infer', infer_help_desc,
+                         {arg='image', type='torch.Tensor', help='input image (WxHx3 tensor)', req=true},
+                         {arg='sigma', type='number', help='gaussian for preprocessing', default=0.8},
+                         {arg='k', type='number', help='thresholding parameter, a large k enforces larger segmentation areas', default=500},
+                         {arg='min', type='number', help='min parameter', default=20}
+                      )
+                      if img:nDimension() ~= 3 or img:size(3) ~= 3 then
+                         error(args.usage)
+                      end
+                      return libmstsegm.infer(img, sigma, k, min)
+                   end
 
    mstsegm.testme = function()
                        local img = image.lena(400,400)

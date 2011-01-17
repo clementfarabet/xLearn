@@ -9,7 +9,17 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <string.h>
+#include <math.h>
 //#include <ncurses.h>
+
+// Useful macros
+#ifndef max
+#define max( a, b ) ( ((a) > (b)) ? (a) : (b) )
+#endif
+
+#ifndef min
+#define min( a, b ) ( ((a) < (b)) ? (a) : (b) )
+#endif
 
 int image_saturate(lua_State *L) {
   THTensor *input = luaT_checkudata(L, 1, 
@@ -258,8 +268,206 @@ int toolbox_dist2vectors(lua_State *L){
   return 1;
 }
 
+/*
+ * Converts an RGB color value to HSL. Conversion formula
+ * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
+ * Assumes r, g, and b are contained in the set [0, 1] and
+ * returns h, s, and l in the set [0, 1].
+ */
+int image_rgb2hsl(lua_State *L) {
+  THTensor *rgb = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *hsl = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
 
+  int i1,i0;
+  double r,g,b,h,s,l;
+  for (i1=0; i1<rgb->size[1]; i1++) {
+    for (i0=0; i0<rgb->size[0]; i0++) {
+      // get Rgb
+      r = THTensor_get3d(rgb, i0, i1, 0);
+      g = THTensor_get3d(rgb, i0, i1, 1);
+      b = THTensor_get3d(rgb, i0, i1, 2);
 
+      double mx = max(max(r, g), b);
+      double mn = min(min(r, g), b);
+      h = (mx + mn) / 2;
+      s = h;
+      l = h;
+
+      if(mx == mn) {
+        h = 0; // achromatic
+        s = 0;
+      } else {
+        double d = mx - mn;
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        if (mx == r) {
+          h = (g - b) / d + (g < b ? 6 : 0);
+        } else if (mx == g) {
+          h = (b - r) / d + 2; 
+        } else {
+          h = (r - g) / d + 4;
+        }
+        h /= 6;
+      }
+
+      // set hsl
+      THTensor_set3d(hsl, i0, i1, 0, h);
+      THTensor_set3d(hsl, i0, i1, 1, s);
+      THTensor_set3d(hsl, i0, i1, 2, l);
+    }
+  }
+  return 0;
+}
+
+// helper
+static inline double hue2rgb(double p, double q, double t) {
+  if (t < 0.) t += 1;
+  if (t > 1.) t -= 1;
+  if (t < 1./6) 
+    return p + (q - p) * 6. * t;
+  else if (t < 1./2) 
+    return q;
+  else if (t < 2./3) 
+    return p + (q - p) * (2./3 - t) * 6.;
+  else
+    return p;                                       
+}
+
+/*
+ * Converts an HSL color value to RGB. Conversion formula
+ * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
+ * Assumes h, s, and l are contained in the set [0, 1] and
+ * returns r, g, and b in the set [0, 1].
+ */
+int image_hsl2rgb(lua_State *L) {
+  THTensor *hsl = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *rgb = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+
+  int i1,i0;
+  double r,g,b,h,s,l;
+  for (i1=0; i1<hsl->size[1]; i1++) {
+    for (i0=0; i0<hsl->size[0]; i0++) {
+      // get hsl
+      h = THTensor_get3d(hsl, i0, i1, 0);
+      s = THTensor_get3d(hsl, i0, i1, 1);
+      l = THTensor_get3d(hsl, i0, i1, 2);
+
+      if(s == 0) {
+        // achromatic
+        r = l;
+        g = l;
+        b = l;
+      } else {
+        double q = (l < 0.5) ? (l * (1 + s)) : (l + s - l * s);
+        double p = 2 * l - q;
+        double hr = h + 1./3;
+        double hg = h;
+        double hb = h - 1./3;
+        r = hue2rgb(p, q, hr);
+        g = hue2rgb(p, q, hg);
+        b = hue2rgb(p, q, hb);
+      }
+
+      // set rgb
+      THTensor_set3d(rgb, i0, i1, 0, r);
+      THTensor_set3d(rgb, i0, i1, 1, g);
+      THTensor_set3d(rgb, i0, i1, 2, b);
+    }
+  }
+  return 0;
+}
+
+/*
+ * Converts an RGB color value to HSV. Conversion formula
+ * adapted from http://en.wikipedia.org/wiki/HSV_color_space.
+ * Assumes r, g, and b are contained in the set [0, 1] and
+ * returns h, s, and v in the set [0, 1].
+ */
+int image_rgb2hsv(lua_State *L) {
+  THTensor *rgb = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *hsv = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+
+  int i1,i0;
+  double r,g,b,h,s,v;
+  for (i1=0; i1<rgb->size[1]; i1++) {
+    for (i0=0; i0<rgb->size[0]; i0++) {
+      // get Rgb
+      r = THTensor_get3d(rgb, i0, i1, 0);
+      g = THTensor_get3d(rgb, i0, i1, 1);
+      b = THTensor_get3d(rgb, i0, i1, 2);
+
+      double mx = max(max(r, g), b);
+      double mn = min(min(r, g), b);
+      h = mx;
+      v = mx;
+
+      double d = mx - mn;
+      s = (mx==0) ? 0 : d/mx;
+
+      if(mx == mn) {
+        h = 0; // achromatic
+      } else {
+        if (mx == r) {
+          h = (g - b) / d + (g < b ? 6 : 0);
+        } else if (mx == g) {
+          h = (b - r) / d + 2; 
+        } else {
+          h = (r - g) / d + 4;
+        }
+        h /= 6;
+      }
+
+      // set hsv
+      THTensor_set3d(hsv, i0, i1, 0, h);
+      THTensor_set3d(hsv, i0, i1, 1, s);
+      THTensor_set3d(hsv, i0, i1, 2, v);
+    }
+  }
+  return 0;
+}
+
+/*
+ * Converts an HSV color value to RGB. Conversion formula
+ * adapted from http://en.wikipedia.org/wiki/HSV_color_space.
+ * Assumes h, s, and l are contained in the set [0, 1] and
+ * returns r, g, and b in the set [0, 1].
+ */
+int image_hsv2rgb(lua_State *L) {
+  THTensor *hsv = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *rgb = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+
+  int i1,i0;
+  double r,g,b,h,s,v;
+  for (i1=0; i1<hsv->size[1]; i1++) {
+    for (i0=0; i0<hsv->size[0]; i0++) {
+      // get hsv
+      h = THTensor_get3d(hsv, i0, i1, 0);
+      s = THTensor_get3d(hsv, i0, i1, 1);
+      v = THTensor_get3d(hsv, i0, i1, 2);
+
+      int i = floor(h*6.);
+      double f = h*6-i;
+      double p = v*(1-s);
+      double q = v*(1-f*s);
+      double t = v*(1-(1-f)*s);
+
+      switch (i % 6) {
+      case 0: r = v, g = t, b = p; break;
+      case 1: r = q, g = v, b = p; break;
+      case 2: r = p, g = v, b = t; break;
+      case 3: r = p, g = q, b = v; break;
+      case 4: r = t, g = p, b = v; break;
+      case 5: r = v, g = p, b = q; break;
+      default: r=0; g = 0, b = 0; break;
+      }
+
+      // set rgb
+      THTensor_set3d(rgb, i0, i1, 0, r);
+      THTensor_set3d(rgb, i0, i1, 1, g);
+      THTensor_set3d(rgb, i0, i1, 2, b);
+    }
+  }
+  return 0;
+}
 
 
 /*

@@ -57,8 +57,8 @@ static int l_getSharedFrame (lua_State *L) {
   if (lua_isboolean(L, 3)) dump_to_file = lua_toboolean(L, 3);
 
   // Get Tensor's Info
-  THCharTensor * tensor8; 
-  THTensor * tensor64;
+  THCharTensor * tensor8 = NULL; 
+  THTensor * tensor64 = NULL;
   int tensor_bits;
   if (luaT_isudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"))) {
     tensor64 = luaT_toudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
@@ -185,15 +185,6 @@ static int l_getSharedFrame (lua_State *L) {
   return 0; 
 }
 
-static void bypass_sigint(int sig_no) {} 
-static int l_bypassSIGINT (lua_State *L) {
-  struct sigaction sa;  
-  memset(&sa, 0, sizeof(sa));  
-  sa.sa_handler = &bypass_sigint;  
-  sigaction(SIGINT, &sa,NULL);  
-  return 0;
-}
-
 static int l_forkProcess (lua_State *L) {
   const char *exec_cmd = luaL_checkstring(L, 1);
   
@@ -217,7 +208,6 @@ static int l_killProcess (lua_State *L) {
   pid_t pID = (pid_t)luaL_checknumber(L, 1);
   printf("Killing process with pID = %d\n", pID);
   kill(pID, SIGINT);
-  wait(NULL);
   return 0;
 }
 
@@ -239,7 +229,6 @@ static const struct luaL_reg camiface [] = {
   {"getSharedFrame", l_getSharedFrame},
   {"forkProcess", l_forkProcess},
   {"killProcess", l_killProcess},
-  {"bypassSigInt", l_bypassSIGINT},
   {"read", l_nonBlockingRead},
   {NULL, NULL}  /* sentinel */
 };

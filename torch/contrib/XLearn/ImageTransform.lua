@@ -21,10 +21,15 @@ function ImageTransform:__init(type)
       error(toolBox.usage('nn.ImageTransform',
                           help_desc,
                           help_example,
-                          {type='string', help='transform = yuv2rgb | rgb2yuv | rgb2y', req=true}))
+                          {type='string', 
+                           help='transform = yuv2rgb | rgb2yuv | rgb2y | hsl2rgb | hsv2rgb | rgb2hsl | rgb2hsv', 
+                           req=true}))
    end
 
+   -- transform type
+   self.type = type
    if type == 'yuv2rgb' then
+      self.islinear = true
       self.linear = nn.SpatialLinear(3,3)
       -- R
       self.linear.weight[1][1] = 1
@@ -42,6 +47,7 @@ function ImageTransform:__init(type)
       self.linear.weight[3][3] = 0
       self.linear.bias[3] = 0
    elseif type == 'rgb2yuv' then
+      self.islinear = true
       self.linear = nn.SpatialLinear(3,3)
       -- Y
       self.linear.weight[1][1] = 0.299
@@ -59,12 +65,21 @@ function ImageTransform:__init(type)
       self.linear.weight[3][3] = -0.10001
       self.linear.bias[3] = 0
    elseif type == 'rgb2y' then
+      self.islinear = true
       self.linear = nn.SpatialLinear(3,1)
       -- Y
       self.linear.weight[1][1] = 0.299
       self.linear.weight[2][1] = 0.587
       self.linear.weight[3][1] = 0.114
       self.linear.bias[1] = 0
+   elseif type == 'hsl2rgb' then
+      self.islinear = false
+   elseif type == 'hsv2rgb' then
+      self.islinear = false
+   elseif type == 'rgb2hsl' then
+      self.islinear = false
+   elseif type == 'rgb2hsv' then
+      self.islinear = false
    else
       error(self.ERROR_UNKNOWN)
    end      
@@ -83,12 +98,28 @@ function ImageTransform:upgradeParameters()
 end
 
 function ImageTransform:forward(input)
-   self.output = self.linear:forward(input)
+   if self.islinear then
+      self.output = self.linear:forward(input)
+   else
+      if self.type == 'rgb2hsl' then
+         self.output = image.rgb2hsl(input, self.output)
+      elseif self.type == 'rgb2hsv' then
+         self.output = image.rgb2hsv(input, self.output)
+      elseif self.type == 'hsl2rgb' then
+         self.output = image.hsl2rgb(input, self.output)
+      elseif self.type == 'rgb2hsv' then
+         self.output = image.rgb2hsv(input, self.output)
+      end
+   end
    return self.output
 end
 
 function ImageTransform:backward()
-   self.gradInput = self.linear:backward()
+   if self.islinear then
+      self.gradInput = self.linear:backward()
+   else
+      error('<ImageTransform.backward>: not implemented')
+   end
    return self.gradInput
 end
 

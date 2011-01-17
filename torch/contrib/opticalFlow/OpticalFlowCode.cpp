@@ -6,11 +6,7 @@
 
 using namespace std;
 
-#ifndef _MATLAB
-	bool OpticalFlow::IsDisplay=true;
-#else
-	bool OpticalFlow::IsDisplay=false;
-#endif
+bool OpticalFlow::IsDisplay=false;
 
 OpticalFlow::OpticalFlow(void)
 {

@@ -70,6 +70,7 @@ SET(luasrc AbsModule.lua
            table.lua
            toolBox.lua
            SparseCriterion.lua
+           Video.lua
            VideoDataSet.lua)
 
 ADD_TORCH_PACKAGE(XLearn "${src}" "${luasrc}")

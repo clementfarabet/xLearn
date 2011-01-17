@@ -31,6 +31,7 @@ if not xLearnLoaded then
    torch.include('XLearn', 'DataSetLabelMe.lua')
    torch.include('XLearn', 'DataList.lua')
    torch.include('XLearn', 'UnsupDataSet.lua')
+   torch.include('XLearn', 'Video.lua')
    torch.include('XLearn', 'VideoDataSet.lua')
 
    -- nn.Deciders

@@ -33,12 +33,15 @@
 
 #define CV_NO_BACKWARD_COMPATIBILITY
 
+//============================================================
 // To load this lib in LUA:
 // require 'libopencv'
 
-// Conversion helper
-// this function just creates an IPL header to describe the tensor
-// (no image allocation is done here)
+//============================================================
+// Conversion helpers
+// these functions just create an IPL header to describe 
+// the tensor given (no image allocation is done here)
+//
 static IplImage * doubleImage(THTensor *source) {
   // Get size and channels
   int channels = source->size[2];
@@ -107,7 +110,125 @@ static IplImage * shortImage(THShortTensor *source) {
   return ipl;
 }
 
+//============================================================
+// Conversion helpers
+// These functions create an IplImage, from a torch Tensor, 
+// and the other way around
+//
+static IplImage * torch2opencv_8U(THTensor *source) {
+  // Pointers
+  uchar * dest_data;
 
+  // Get size and channels
+  int channels = source->size[2];
+  int dest_step;
+  CvSize dest_size = cvSize(source->size[0], source->size[1]);
+
+  // Create ipl image
+  IplImage * dest = cvCreateImage(dest_size, IPL_DEPTH_8U, channels);
+
+  // get pointer to raw data
+  cvGetRawData(dest, (uchar**)&dest_data, &dest_step, &dest_size);
+
+  // copy
+  int x, y, k;
+  for (y=0; y<source->size[1]; y++)
+    for (x=0; x<source->size[0]; x++)
+      for (k=0; k<source->size[2]; k++) {
+        dest_data[ y*dest_step + x*dest->nChannels + (dest->nChannels-1)-k ]
+          = (uchar)(THTensor_get3d(source, x, y, k) * 255.0);
+      }
+
+  // return freshly created IPL image
+  return dest;
+}
+
+static IplImage * torch2opencv_32F(THTensor *source) {
+  // Pointers
+  float * dest_data;
+
+  // Get size and channels
+  int channels = source->size[2];
+  int dest_step;
+  CvSize dest_size = cvSize(source->size[0], source->size[1]);
+
+  // Create ipl image
+  IplImage * dest = cvCreateImage(dest_size, IPL_DEPTH_32F, channels);
+
+  // get pointer to raw data
+  cvGetRawData(dest, (uchar**)&dest_data, &dest_step, &dest_size);
+  dest_step /= sizeof(float);
+
+  // copy
+  int x, y, k;
+  for (y=0; y<source->size[1]; y++)
+    for (x=0; x<source->size[0]; x++)
+      for (k=0; k<source->size[2]; k++) {
+        dest_data[ y*dest_step + x*dest->nChannels + (dest->nChannels-1)-k ]
+          = (float)(THTensor_get3d(source, x, y, k));
+      }
+
+  // return freshly created IPL image
+  return dest;
+}
+
+static THTensor * opencv2torch_8U(IplImage *source, THTensor *dest) {
+  // Pointers
+  uchar * source_data; 
+
+  // Get pointers / info
+  int source_step;
+  CvSize source_size;
+  cvGetRawData(source, (uchar**)&source_data, &source_step, &source_size);
+
+  // Resize target
+  THTensor_resize3d(dest, source->width, source->height, source->nChannels);
+
+  // copy
+  int x, y, k;
+  for (y=0; y<source->height; y++)
+    for (x=0; x<source->width; x++)
+      for (k=0; k<source->nChannels; k++) {
+        THTensor_set3d(dest, x, y, k, 
+                       (double)source_data[ y*source_step + x*source->nChannels + (source->nChannels-1)-k ]);
+      }
+
+  // return freshly created IPL image
+  return dest;
+}
+
+static THTensor * opencv2torch_32F(IplImage *source, THTensor *dest) {
+  // Pointers
+  float * source_data; 
+
+  // Get pointers / info
+  int source_step;
+  CvSize source_size;
+  cvGetRawData(source, (uchar**)&source_data, &source_step, &source_size);
+  source_step /= sizeof(float);
+
+  // Resize target
+  THTensor_resize3d(dest, source->width, source->height, source->nChannels);
+
+  // copy
+  int x, y, k;
+  for (y=0; y<source->height; y++)
+    for (x=0; x<source->width; x++)
+      for (k=0; k<source->nChannels; k++) {
+        THTensor_set3d(dest, x, y, k, 
+                       (double)source_data[ y*source_step + x*source->nChannels + (source->nChannels-1)-k ]);
+      }
+
+  // return freshly created IPL image
+  return dest;
+}
+
+//============================================================
+// Wrapper around simple OpenCV functions
+// All these functions work on the Lua stack
+// Input and output tensors must be provided, usually in the
+// correct format (char/float/double...)
+//
 static int l_cvCanny (lua_State *L) {
   // Get Tensor's Info
   THCharTensor * source = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.CharTensor"));
@@ -136,7 +257,6 @@ static int l_cvCanny (lua_State *L) {
   return 0;
 }
 
-
 static int l_cvSobel (lua_State *L) {
   // Get Tensor's Info
   THCharTensor * source = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.CharTensor"));
@@ -164,57 +284,134 @@ static int l_cvSobel (lua_State *L) {
   return 0;
 }
 
-
-static int l_cvCalcOpticalFlowBM (lua_State *L) {
+//============================================================
+// OpticalFlow
+// Works on torch.Tensors (double). All the conversions are
+// done in C.
+//
+static int l_cvCalcOpticalFlow(lua_State *L) {
   // Get Tensor's Info
-  THCharTensor * current = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.CharTensor"));
-  THCharTensor * previous = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.CharTensor"));
-  THFloatTensor * velx = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.FloatTensor"));
-  THFloatTensor * vely = luaT_checkudata(L, 4, luaT_checktypename2id(L, "torch.FloatTensor"));
+  THTensor * current = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * previous = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * velx = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * vely = luaT_checkudata(L, 4, luaT_checktypename2id(L, "torch.Tensor"));
 
-  // Generate IPL headers
-  IplImage * current_ipl = charImage(current);
-  IplImage * previous_ipl = charImage(previous);
-  IplImage * velx_ipl = floatImage(velx);
-  IplImage * vely_ipl = floatImage(vely);
-  
-  // Thresholds with default values
+  // Generate IPL images
+  IplImage * current_ipl = torch2opencv_8U(current);
+  IplImage * previous_ipl = torch2opencv_8U(previous);
+  IplImage * velx_ipl;
+  IplImage * vely_ipl;
+
+  // Default values
+  int method = 1;
+  int lagrangian = 1;
+  int iterations = 5;
   CvSize blockSize = cvSize(7, 7);
   CvSize shiftSize = cvSize(20, 20);
   CvSize max_range = cvSize(20, 20);
   int usePrevious = 0;
-  if (lua_isnumber(L, 5) && lua_isnumber(L, 6)) { 
-    blockSize.width = lua_tonumber(L, 3); 
-    blockSize.width = lua_tonumber(L, 4);
+
+  // User values:
+  if (lua_isnumber(L, 5)) {
+    method = lua_tonumber(L, 5);
   }
-  if (lua_isnumber(L, 7) && lua_isnumber(L, 8)) { 
-    shiftSize.width = lua_tonumber(L, 5); 
-    shiftSize.width = lua_tonumber(L, 6);
+
+  // HS only:
+  if (lua_isnumber(L, 6)) {
+    lagrangian = lua_tonumber(L, 6);
   }
-  if (lua_isnumber(L, 9) && lua_isnumber(L, 10)) { 
-    shiftSize.width = lua_tonumber(L, 7); 
-    shiftSize.width = lua_tonumber(L, 8);
+  if (lua_isnumber(L, 7)) {
+    iterations = lua_tonumber(L, 7);
   }
-  if (lua_isnumber(L, 11)) { 
-    usePrevious = lua_tonumber(L, 9); 
+
+  // BM+LK only:
+  if (lua_isnumber(L, 6) && lua_isnumber(L, 7)) { 
+    blockSize.width = lua_tonumber(L, 6); 
+    blockSize.height = lua_tonumber(L, 7);
+  }
+  if (lua_isnumber(L, 8) && lua_isnumber(L, 9)) { 
+    shiftSize.width = lua_tonumber(L, 8); 
+    shiftSize.height = lua_tonumber(L, 9);
+  }
+  if (lua_isnumber(L, 10) && lua_isnumber(L, 11)) { 
+    max_range.width = lua_tonumber(L, 10); 
+    max_range.height = lua_tonumber(L, 11);
+  }
+  if (lua_isnumber(L, 12)) { 
+    usePrevious = lua_tonumber(L, 12); 
   }  
 
-  // Simple call to CV function
-  cvCalcOpticalFlowBM(previous_ipl, current_ipl, blockSize, shiftSize, 
-                      max_range, usePrevious, velx_ipl, vely_ipl);
+  // Compute flow
+  if (method == 1) 
+    {
+      // Alloc outputs
+      CvSize osize = cvSize((previous_ipl->width-blockSize.width)/shiftSize.width,
+                            (previous_ipl->height-blockSize.height)/shiftSize.height);
 
-  // Deallocate headers
-  cvReleaseImageHeader(&previous_ipl);
-  cvReleaseImageHeader(&current_ipl);
-  cvReleaseImageHeader(&vely_ipl);
-  cvReleaseImageHeader(&velx_ipl);
+      // Use previous results
+      if (usePrevious == 1) {
+        velx_ipl = torch2opencv_32F(velx);
+        vely_ipl = torch2opencv_32F(vely);
+      } else {
+        velx_ipl = cvCreateImage(osize, IPL_DEPTH_32F, 1);
+        vely_ipl = cvCreateImage(osize, IPL_DEPTH_32F, 1);
+      }
+
+      // Cv Call
+      cvCalcOpticalFlowBM(previous_ipl, current_ipl, blockSize, shiftSize, 
+                          max_range, usePrevious, velx_ipl, vely_ipl);
+    }
+  else if (method == 2) 
+    {
+      // Alloc outputs
+      CvSize osize = cvSize(previous_ipl->width, previous_ipl->height);
+
+      velx_ipl = cvCreateImage(osize, IPL_DEPTH_32F, 1);
+      vely_ipl = cvCreateImage(osize, IPL_DEPTH_32F, 1);
+
+      // Cv Call
+      cvCalcOpticalFlowLK(previous_ipl, current_ipl, blockSize, velx_ipl, vely_ipl);
+    }
+  else if (method == 3) 
+    {
+      // Alloc outputs
+      CvSize osize = cvSize(previous_ipl->width, previous_ipl->height);
+
+      // Use previous results
+      if (usePrevious == 1) {
+        velx_ipl = torch2opencv_32F(velx);
+        vely_ipl = torch2opencv_32F(vely);
+      } else {
+        velx_ipl = cvCreateImage(osize, IPL_DEPTH_32F, 1);
+        vely_ipl = cvCreateImage(osize, IPL_DEPTH_32F, 1);
+      }
+
+      // Iteration criterion
+      CvTermCriteria term = cvTermCriteria(CV_TERMCRIT_ITER, iterations, 0);
+
+      // Cv Call
+      cvCalcOpticalFlowHS(previous_ipl, current_ipl, usePrevious, velx_ipl, vely_ipl, 
+                          lagrangian, term);
+    }
+
+  // return results
+  opencv2torch_32F(velx_ipl, velx);
+  opencv2torch_32F(vely_ipl, vely);
+
+  // Deallocate IPL images
+  cvReleaseImage(&previous_ipl);
+  cvReleaseImage(&current_ipl);
+  cvReleaseImage(&vely_ipl);
+  cvReleaseImage(&velx_ipl);
 
   return 0;
 }
 
-
-
-/* Merge channels from input, to generate an interleaved image. */
+//============================================================
+// Other converters
+// a bit redundant now, these two functions swap from RGB
+// to BGR
+//
 IplImage * torchRGBtoOpenCVBGR(IplImage * source) {
   uchar * source_data; 
   uchar * dest_data;
@@ -241,8 +438,6 @@ IplImage * torchRGBtoOpenCVBGR(IplImage * source) {
   return dest;
 }
 
-
-/* unmerge channels from input, to generate an torch image. */
 void openCVBGRtoTorchRGB(IplImage * source, IplImage * dest) {
   uchar * source_data; 
   double * dest_data;
@@ -266,8 +461,10 @@ void openCVBGRtoTorchRGB(IplImage * source, IplImage * dest) {
   dest->dataOrder = 1;
 }
 
-
-/* takes image filename and cascade path from the command line */
+//============================================================
+// HaarDetectObjects
+// Simple object detector based on haar features
+//
 static int l_cvHaarDetectObjects (lua_State *L) {
   // Generate IPL header from tensor
   THCharTensor * input = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.CharTensor"));
@@ -298,13 +495,15 @@ static int l_cvHaarDetectObjects (lua_State *L) {
     scale = 2;
   }
 
-  //printf("dumping frame\n");
-  //cvSaveImage("1_image_dump.png", small_image, NULL);
-
   /* use the fastest variant */
   CvSeq* faces;
   CvMemStorage* storage = cvCreateMemStorage(0);
-  faces = cvHaarDetectObjects( small_image, cascade, storage, 1.2, 3, 0, cvSize(30,30) );
+#if (CV_MINOR_VERSION >= 2)
+  faces = cvHaarDetectObjects( small_image, cascade, storage, 1.2, 3, 0,
+                               cvSize(30,30), cvSize(small_image->width,small_image->height) );
+#else
+  faces = cvHaarDetectObjects( small_image, cascade, storage, 1.2, 3, 0, cvSize(30,30));
+#endif
   return 0;
 
   /* extract all the rectangles, and add them on the stack */
@@ -344,7 +543,10 @@ static int l_cvHaarDetectObjects (lua_State *L) {
   return 1; // the table contains the results
 }
 
-
+//============================================================
+// CaptureFromCAM
+// wrapper around the Cv camera interface
+//
 static CvCapture *camera = 0;
 static int l_cvCaptureFromCAM (lua_State *L) {
   // Get Tensor's Info
@@ -389,14 +591,15 @@ static int l_cvReleaseCAM (lua_State *L) {
   return 0;
 }
 
-
+//============================================================
 // Register functions in LUA
+//
 static const struct luaL_reg opencv [] = {
   {"canny", l_cvCanny},
   {"sobel", l_cvSobel},
   {"captureFromCam", l_cvCaptureFromCAM},
   {"releaseCam", l_cvReleaseCAM},
-  {"calcOpticalFlow", l_cvCalcOpticalFlowBM},
+  {"calcOpticalFlow", l_cvCalcOpticalFlow},
   {"haarDetectObjects", l_cvHaarDetectObjects},
   {NULL, NULL}  /* sentinel */
 };

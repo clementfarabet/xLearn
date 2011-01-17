@@ -55,7 +55,13 @@ function toolBox.usage(funcname, description, example, ...)
          while key:len() < 40 do
             key = key .. ' '
          end
-         str = str .. key .. '-- ' .. param.help .. '\n'
+         str = str .. key .. '-- ' .. param.help 
+         if param.default or param.default == false then
+            str = str .. '  [default = ' .. tostring(param.default) .. ']'
+         elseif param.defaulta then
+            str = str .. '  [default == ' .. param.defaulta .. ']'
+         end
+         str = str.. '\n'
       end
       str = str .. '}\n'
 
@@ -80,6 +86,68 @@ function toolBox.usage(funcname, description, example, ...)
    str = str .. '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
    str = str .. c.none
    return str
+end
+
+--------------------------------------------------------------------------------
+-- toolBox.unpack()
+-- standard argument function: used to handle named arguments, and 
+-- display automated help for functions
+--------------------------------------------------------------------------------
+function toolBox.unpack(args, funcname, description, ...)
+   -- look at def, autogen example
+   local defs = {...}
+   local example
+   if #defs > 1 then
+      example = funcname .. '{' .. defs[2].arg .. '=' .. defs[2].type .. ', '
+                                .. defs[1].arg .. '=' .. defs[1].type .. '}\n'
+      example = example .. funcname .. '(' .. defs[1].type .. ',' .. ' ...)'
+   end
+
+   -- generate usage string
+   local usage = toolBox.usage(funcname, description, example, ...)
+
+   -- get args
+   local iargs = {}
+   if #args == 0 then error(usage)
+   elseif #args == 1 and type(args[1]) == 'table' and #args[1] == 0 then
+      -- named args
+      iargs = args[1]
+   else
+      -- ordered args
+      for i,a in ipairs(args) do
+         iargs[defs[i].arg] = a
+      end
+   end
+
+   -- check/set arguments
+   local dargs = {}
+   local c = toolBox.COLORS
+   for i,def in ipairs(defs) do
+      -- is value requested ?
+      if def.req and not iargs[def.arg] then
+         print(c.Red .. 'missing argument: ' .. def.arg .. c.none)
+         error(usage)
+      end
+      -- get value or default
+      dargs[def.arg] = iargs[def.arg]
+      if dargs[def.arg] == nil then
+         dargs[def.arg] = def.default
+      end
+      if dargs[def.arg] == nil and def.defaulta then
+         dargs[def.arg] = dargs[def.defaulta]
+      end
+      dargs[i] = dargs[def.arg]
+   end
+
+   -- return usage too
+   dargs.usage = usage
+
+   -- return modified args
+   return dargs,
+   dargs[1], dargs[2], dargs[3], dargs[4], dargs[5], dargs[6], dargs[7], dargs[8], 
+   dargs[9], dargs[10], dargs[11], dargs[12], dargs[13], dargs[14], dargs[15], dargs[16],
+   dargs[17], dargs[18], dargs[19], dargs[20], dargs[21], dargs[22], dargs[23], dargs[24],
+   dargs[25], dargs[26], dargs[27], dargs[28], dargs[29], dargs[30], dargs[31], dargs[32]
 end
 
 --------------------------------------------------------------------------------
@@ -401,6 +469,24 @@ function toolBox.isJIT(...)
       return true 
    end 
 end
+
+
+--------------------------------------------------------------------------------
+-- toolBox.installed(package)
+-- returns true if package is installed
+--------------------------------------------------------------------------------
+function toolBox.installed(package) 
+   return paths.dirp(paths.concat(paths.install_lua_path, package))
+end
+function toolBox.require(package) 
+   if toolBox.installed(package) then
+      return require(package)
+   else
+      print('warning: <' .. package .. '> could not be loaded (is it installed?)')
+      return false
+   end
+end
+xrequire = toolBox.require
 
 
 --------------------------------------------------------------------------------
