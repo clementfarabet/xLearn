@@ -59,6 +59,7 @@ convnet = newconvnet
 -- camera and converter
 source = nn.ImageSource(options.source or 'camera', nil, options.camidx)
 rgb2y = nn.ImageTransform('rgb2y')
+rgb2hsl = nn.ImageTransform('rgb2hsl')
 
 -- multiscale packer
 scales = {1/2.8, 1/4, 1/5, 1/7, 1/10, 1/12}
@@ -171,14 +172,14 @@ while true do
    neuFlow.profiler:start('order-blobs')
    listOfFaces = image.reorderBlobs(listOfFaces)
    listOfFaces = image.remapBlobs(listOfFaces)
-   listOfFaces = image.mergeBlobs(listOfFaces, 50)
+   listOfFaces = image.mergeBlobs(listOfFaces, 5)
    neuFlow.profiler:lap('order-blobs')
 
    neuFlow.profiler:start('display')
    painter:gbegin()
    painter:showpage()
    -- display input image
-   disp_input:show{tensor=camFrameY, painter=painter, offset_x=0, offset_y=0,
+   disp_input:show{tensor=camFrame, painter=painter, offset_x=0, offset_y=0,
                    min=0, max=1,
                    inplace=true,
                    legend='original', globalzoom=1}
@@ -191,22 +192,27 @@ while true do
    -- print boxes
    local i = 1
    local done = 0
-   if listOfFaces then
-      while true do
-         if listOfFaces[i] then
-            image.qtdrawbox{ painter=painter,
-                             x=listOfFaces[i].x * 4,
-                             y=listOfFaces[i].y * 4,
-                             w=32/listOfFaces[i].scale,
-                             h=32/listOfFaces[i].scale,
-                             globalzoom=1,
-                             legend=listOfFaces[i].tag}
-            done = done + 1
-         end
-         i = i + 1
-         if (done == listOfFaces.nbOfBlobs) then
-            break
-         end
+   for i,result in ipairs(listOfFaces) do
+      local x = result.x
+      local y = result.y
+      local scale = result.scale
+
+      -- new: extract a patch around the detection, in HSL space,
+      --      then compute the histogram of the Hue
+      --      for skin tones, the Hue is always < 0.05
+      local patch = camFrame:narrow(1,x*4,32):narrow(2,y*4,32)
+      local patchH = rgb2hsl:forward(patch):select(3,1)
+      local hist = lab.hist(patchH,100)
+
+      -- only display skin-tone detections
+      if hist.max.val < 0.2 or hist.max.val > 0.9 then
+         image.qtdrawbox{ painter=painter,
+                          x=listOfFaces[i].x * 4,
+                          y=listOfFaces[i].y * 4,
+                          w=32/listOfFaces[i].scale,
+                          h=32/listOfFaces[i].scale,
+                          globalzoom=1,
+                          legend=listOfFaces[i].tag}
       end
    end
 

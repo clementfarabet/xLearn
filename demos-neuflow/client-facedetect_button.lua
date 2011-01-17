@@ -188,7 +188,7 @@ function process()
    neuFlow.profiler:start('order-blobs')
    listOfFaces = image.reorderBlobs(listOfFaces)
    listOfFaces = image.remapBlobs(listOfFaces)
-   listOfFaces = image.mergeBlobs(listOfFaces, 50)
+   listOfFaces = image.mergeBlobs(listOfFaces, 5)
    neuFlow.profiler:lap('order-blobs')
    
    neuFlow.profiler:start('display')

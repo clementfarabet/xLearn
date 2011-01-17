@@ -47,7 +47,7 @@ while true do
                                  labels={"face"}, listOfBlobs=nil}
    listOfFaces = image.reorderBlobs(listOfFaces)
    listOfFaces = image.remapBlobs(listOfFaces)
-   listOfFaces = image.mergeBlobs(listOfFaces, 50)
+   listOfFaces = image.mergeBlobs(listOfFaces, 5)
 
    -- PAINT
    painter:gbegin()

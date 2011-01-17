@@ -85,7 +85,7 @@ local function process()
    profiler:start('order-blobs')
    listOfFaces = image.reorderBlobs(listOfFaces)
    listOfFaces = image.remapBlobs(listOfFaces)
-   listOfFaces = image.mergeBlobs(listOfFaces, 50)
+   listOfFaces = image.mergeBlobs(listOfFaces, 5)
    profiler:lap('order-blobs')
 end
 
