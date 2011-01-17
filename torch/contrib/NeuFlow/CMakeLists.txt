@@ -6,6 +6,7 @@ FILE(GLOB MyCSources segments/coef*)
 
 SET(luasrc defines.lua
            tools.lua
+           rom.lua
            Log.lua
            Memory.lua
            Compiler.lua

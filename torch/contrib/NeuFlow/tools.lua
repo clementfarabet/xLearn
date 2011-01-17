@@ -53,6 +53,75 @@ function toolBox.readBinWriteHex(input, output, word_width, requested_size_b)
 end
 
 
+----------------------------------------------------------------------
+--- reads binary and dumps ROM model (in verilog).
+-- This function reads binary file and produces a ROM, to be directly
+-- synthesized by XST
+--
+function toolBox.readBinWriteRom(input, output, word_width, name)
+   -- Files
+   local file_rom = assert(io.open(output, "w"))
+   local file_bin = assert(io.open(input, "rb"))
+   local template = toolBox.romTemplate
+
+   print('# Converting bin code ['..input..'] to ROM file ['
+         ..output..'] using '..word_width..'bit words')
+
+   -- read binary
+   local word_width_b = word_width / 8
+   local list_bytes = {}
+   while true do
+      local bytes = file_bin:read(word_width_b)
+      if not bytes then break end
+      local mem_word = {}
+      for b in string.gfind(bytes, ".") do
+         table.insert(mem_word, b)
+      end
+      table.insert(list_bytes, mem_word)
+   end
+
+   -- infer addr width
+   local addr_width = math.ceil(math.log2(#list_bytes))
+   local addr_width_h = math.ceil(addr_width / 4)
+
+   -- get align tab size
+   local tab = ''
+   local ii,jj = string.find(template,'\n%s*#STORAGE')
+   local ntabs = jj-ii+1-string.len('#STORAGE\n')
+   for i=1,ntabs do tab = tab .. ' ' end
+
+   -- generate ROM content
+   local content = ''
+   for addr,data in ipairs(list_bytes) do
+      content = content .. addr_width .. "'h" .. string.format("%0"..addr_width_h.."X", (addr-1))
+      content = content .. ': data <= ' .. word_width .. "'h"
+      for i = #data,1,-1 do
+         content = content .. string.format("%02X", string.byte(data[i]))
+      end
+      content = content .. ';'
+      if addr ~= #list_bytes then content = content .. '\n' .. tab end
+   end
+
+   -- Process all macros
+   local rom_name = name or output:gsub('.v','')
+   template = template:gsub('#ROM_NAME', rom_name)
+   template = template:gsub('#ADDR_WIDTH', addr_width)
+   template = template:gsub('#DATA_WIDTH', word_width)
+   template = template:gsub('#OUTPUT_ON_RESET', (word_width .. "'h0"))
+   template = template:gsub('#STORAGE', content)
+
+   -- write out
+   file_rom:write(template)
+
+   -- close all
+   file_rom:close()
+   file_bin:close()
+end
+
+
+----------------------------------------------------------------------
+--- helper
+--
 function table.reverse(t)
    local out = {}
    for i = #t,1,-1 do
@@ -60,6 +129,7 @@ function table.reverse(t)
    end
    return out
 end
+
 
 ----------------------------------------------------------------------
 --- extends math domain with approx functions.

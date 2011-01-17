@@ -10,6 +10,7 @@ if not NeuFlowLoaded then
 
    torch.include('NeuFlow', 'defines.lua')
    torch.include('NeuFlow', 'tools.lua')
+   torch.include('NeuFlow', 'rom.lua')
    torch.include('NeuFlow', 'Log.lua')
    torch.include('NeuFlow', 'Memory.lua')
    torch.include('NeuFlow', 'Compiler.lua')
