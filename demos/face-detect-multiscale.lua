@@ -29,7 +29,8 @@ file:close()
 
 -- various transformers:
 rgb2y = nn.ImageTransform('rgb2y')
-scales = {1/3, 1/5, 1/7.5, 1/11, 1/15}
+rgb2hsl = nn.ImageTransform('rgb2hsl')
+scales = {0.3, 0.24, 0.192, 0.15, 0.12, 0.1, 0.0833}
 packer = nn.PyramidPacker(scales, convnet)
 unpacker = nn.PyramidUnPacker(convnet)
 
@@ -85,7 +86,7 @@ local function process()
    profiler:start('order-blobs')
    listOfFaces = image.reorderBlobs(listOfFaces)
    listOfFaces = image.remapBlobs(listOfFaces)
-   listOfFaces = image.mergeBlobs(listOfFaces, 50)
+   listOfFaces = image.mergeBlobs(listOfFaces, 3)
    profiler:lap('order-blobs')
 end
 
@@ -95,7 +96,7 @@ local function paint()
    profiler:start('display')
 
    -- image from cam
-   displayer_source:show{tensor=frameY, painter=painter, 
+   displayer_source:show{tensor=camFrame, painter=painter, 
                          globalzoom=zoom, 
                          min=0, max=1,
                          offset_x=0, offset_y=0,
@@ -144,25 +145,27 @@ local function paint()
    end
 
    -- print objects
-   local i = 1
-   local done = 0
-   while true do
-      if (listOfFaces[i] ~= nil) then
-         local x = listOfFaces[i].x
-         local y = listOfFaces[i].y
-         local scale = listOfFaces[i].scale
+   for i,result in ipairs(listOfFaces) do
+      local x = result.x
+      local y = result.y
+      local scale = result.scale
+
+      -- new: extract a patch around the detection, in HSL space,
+      --      then compute the histogram of the Hue
+      --      for skin tones, the Hue is always < 0.05
+      local patch = camFrame:narrow(1,x*4,32):narrow(2,y*4,32)
+      local patchH = rgb2hsl:forward(patch):select(3,1)
+      local hist = lab.hist(patchH,100)
+
+      -- only display skin-tone detections
+      if hist.max.val < 0.2 or hist.max.val > 0.9 then
          image.qtdrawbox{ painter=painter,
                           x=x * 4,
                           y=y * 4,
                           w=32/scale,
                           h=32/scale,
                           globalzoom=zoom, 
-                          legend=listOfFaces[i].tag}
-         done = done + 1
-      end
-      i = i + 1
-      if (done == listOfFaces.nbOfBlobs) then
-         break
+                          legend=result.tag}
       end
    end
    profiler:lap('display')
@@ -177,8 +180,8 @@ end
 function demo()
    -- Loop Process
    local timer = qt.QTimer()
-   timer.interval = 0
-   timer.singleShot = false
+   timer.interval = 1
+   timer.singleShot = true
    timer:start()
    qt.connect(timer,'timeout()',
               function() 
@@ -191,7 +194,7 @@ function demo()
                  end
                  timer:start()
               end )
-   
+
    -- Close Process   
    widget.windowTitle = "Face Detection"
    widget:show()

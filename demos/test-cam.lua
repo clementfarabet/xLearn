@@ -62,7 +62,7 @@ end
 
 -- Loop Process
 local timer = qt.QTimer()
-timer.interval = 0
-timer.singleShot = false
+timer.interval = 1
+timer.singleShot = true
 timer:start()
-qt.connect(timer,'timeout()', loop)
+qt.connect(timer,'timeout()', function() loop() timer:start() end)

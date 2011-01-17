@@ -5,10 +5,15 @@
 -- in the repo
 --
 
-require 'mstsegm'
-mstsegm.testme()
+require 'XLearn'
+mstsegm = xrequire 'mstsegm'
+powerwatersegm = xrequire 'powerwatersegm'
 
-require 'powerwatersegm'
+if not mstsegm or not powerwatersegm then
+   error('please install 3rd party packages (make USE_3RDPARTY=1)')
+end
+
+mstsegm.testme()
 powerwatersegm.testme()
 
 print([[

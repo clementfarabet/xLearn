@@ -32,7 +32,8 @@ file:close()
 
 -- various transformers:
 rgb2y = nn.ImageTransform('rgb2y')
-scales = {1/3, 1/5, 1/7.5, 1/11, 1/15}
+rgb2hsl = nn.ImageTransform('rgb2hsl')
+scales = {0.3, 0.24, 0.192, 0.15, 0.12, 0.1}
 packer = nn.PyramidPacker(scales, convnet)
 unpacker = nn.PyramidUnPacker(convnet)
 
@@ -44,9 +45,14 @@ displayer_source = Displayer()
 displayer_features = Displayer()
 displayer_preproc = Displayer()
 displayer_result = Displayer()
+displayer_last = Displayer()
 
 -- profiler
 profiler = Profiler()
+
+-- store detections
+lastfaces = {}
+glbptr = 1
 
 ----------------------------------------------------------------------
 -- ROUTINES: we use two routines: process() and paint()
@@ -91,7 +97,7 @@ local function process()
    profiler:start('order-blobs')
    listOfFaces = image.reorderBlobs(listOfFaces)
    listOfFaces = image.remapBlobs(listOfFaces)
-   listOfFaces = image.mergeBlobs(listOfFaces, 50)
+   listOfFaces = image.mergeBlobs(listOfFaces, 5)
    profiler:lap('order-blobs')
 
    -- create a list of seeds, for the segmentation algo
@@ -104,8 +110,22 @@ local function process()
          local x = listOfFaces[i].x
          local y = listOfFaces[i].y
          local scale = listOfFaces[i].scale
+
+         -- new: extract a patch around the detection, in HSL space,
+         --      then compute the histogram of the Hue
+         --      for skin tones, the Hue is always < 0.05
+         local patch = camFrame:narrow(1,x*4,32):narrow(2,y*4,32)
+         local patchH = rgb2hsl:forward(patch):select(3,1)
+         local hist = lab.hist(patchH,20)
+
          -- positives:
-         table.insert(seeds, {x*4+16/scale, y*4+16/scale, 1})
+         if hist.max.val < 0.05 then
+            table.insert(seeds, {x*4+16/scale, y*4+16/scale, 1})
+            table.insert(seeds, {x*4+16/scale - 8, y*4+16/scale, 1})
+            table.insert(seeds, {x*4+16/scale + 8, y*4+16/scale, 1})
+            table.insert(seeds, {x*4+16/scale, y*4+16/scale - 8, 1})
+            table.insert(seeds, {x*4+16/scale, y*4+16/scale + 8, 1})
+         end
          done = done + 1
       end
       i = i + 1
@@ -125,11 +145,6 @@ local function process()
 end
 
 local function paint()
-   -- remove background !!
-   profiler:start('bg-suppress')
-   frameY:map(segments, function (i,s) if (s==0) then return i else return 1 end end)
-   profiler:lap('bg-suppress')
-
    painter:gbegin()
    painter:showpage()
    profiler:start('display')
@@ -141,52 +156,79 @@ local function paint()
                          offset_x=0, offset_y=0,
                          legend='Face detection'}
 
-   if widget.checkBox1.checked then
-      -- image pre-processed
-      displayer_preproc:show{tensor=convnet.modules[1].output, painter=painter, 
-                             globalzoom=zoom,
-                             zoom=1,
-                             min=-1, max=1,
-                             offset_x=0, offset_y=frameY:size(2)+30,
-                             legend='Local Normalized'}
+   -- remove background !!
+   profiler:start('bg-suppress')
+   frameY:map(segments, function (i,s) if (s==0) then return i else return 0 end end)
+   profiler:lap('bg-suppress')
+   displayer_source:show{tensor=frameY, painter=painter, 
+                         globalzoom=zoom, 
+                         min=0, max=1,
+                         offset_x=frameY:size(1), offset_y=0,
+                         legend='Face detection'}
 
-      -- disp features
-      local features = convnet.modules[#convnet.modules-1].output
-      local legend = 'Features'
-      local k = 0
-      local j = 0
-      for i=1,features:size(3) do
-         displayer_features:show{tensor=features:select(3,i),
-                                 painter=painter, 
-                                 globalzoom=zoom,
-                                 min=-1, max=1,
-                                 offset_x=800+j, 
-                                 offset_y=k*(features:size(2)+10) + 40,
-                                 legend=legend}
-         legend = nil
-         k = k + 1
-         if k == features:size(3)/2 then j = j + 100; k = 0 end
+   -- print last detects
+   local off_x = 0
+   for i,face in ipairs(lastfaces) do
+      displayer_last:show{tensor=face, painter=painter,
+                          globalzoom=zoom,
+                          min=0, max=1,
+                          offset_x=off_x, offset_y=frameY:size(2)+16}
+      off_x = off_x + face:size(1)
+   end
+
+   -- print boxes
+   local i = 1
+   local done = 0
+   while true do
+      if (listOfFaces[i] ~= nil) then
+         local x = listOfFaces[i].x
+         local y = listOfFaces[i].y
+         local scale = listOfFaces[i].scale
+
+         -- new: extract a patch around the detection, in HSL space,
+         --      then compute the histogram of the Hue
+         --      for skin tones, the Hue is always < 0.05
+         local patch = camFrame:narrow(1,x*4,32):narrow(2,y*4,32)
+         local patchH = rgb2hsl:forward(patch):select(3,1)
+         local hist = lab.hist(patchH,20)
+
+         -- only display skin-tone detections
+         if hist.max.val < 0.15 or hist.max.val > 0.9 then
+            image.qtdrawbox{ painter=painter,
+                             x=x * 4,
+                             y=y * 4,
+                             w=32/scale,
+                             h=32/scale,
+                             globalzoom=zoom, 
+                             legend=listOfFaces[i].tag}
+
+            -- store face
+            if x*4>=1 and y*4>=1 
+               and (x*4+32/scale-1)<=frameY:size(1) 
+               and (y*4+32/scale-1)<=frameY:size(2) then
+
+               local face = torch.Tensor(32/scale, 32/scale)
+               face:copy(frameY:narrow(1,x*4,32/scale):narrow(2,y*4,32/scale))
+
+               lastfaces[glbptr] = nil
+               collectgarbage()
+               lastfaces[glbptr] = face
+               glbptr = glbptr + 1
+               if glbptr == 10 then glbptr = 1 end
+            end
+         end
+         done = done + 1
       end
-
-      -- disp classifications
-      local step = 40
-      for i=1,#outputMaps do
-         displayer_result:show{tensor=outputMaps[i]:select(3,1), painter=painter, 
-                               globalzoom=zoom,
-                               zoom = 6,
-                               inplace=true,
-                               min=-1, max=1,
-                               offset_x=1100, 
-                               offset_y=step,
-                               legend='Scaled Output #'..i}
-         step = outputMaps[i]:size(2)*8 + step + 40
+      i = i + 1
+      if (done == listOfFaces.nbOfBlobs) then
+         break
       end
    end
    profiler:lap('display')
    profiler:lap('full-loop')
 
    -- disp times
-   profiler:displayAll{painter=painter, x=10, y=frameY:size(2)*1.8*zoom, zoom=zoom}
+   --profiler:displayAll{painter=painter, x=10, y=frameY:size(2)*1.2*zoom, zoom=zoom}
    painter:gend()
 end
 
@@ -194,8 +236,8 @@ end
 function demo()
    -- Loop Process
    local timer = qt.QTimer()
-   timer.interval = 0
-   timer.singleShot = false
+   timer.interval = 1
+   timer.singleShot = true
    timer:start()
    qt.connect(timer,'timeout()',
               function() 

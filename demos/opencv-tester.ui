@@ -115,15 +115,15 @@
         <property name="text">
          <string>Optic Flow</string>
         </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
        </widget>
       </item>
       <item>
        <widget class="QRadioButton" name="radioButton_3">
         <property name="text">
-         <string>Filters</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
+         <string>Canny</string>
         </property>
        </widget>
       </item>

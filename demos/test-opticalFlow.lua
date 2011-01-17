@@ -4,10 +4,21 @@
 -- computes the optical flow-field of a pair of images
 --
 
-require 'opticalFlow'
-opticalFlow.testme()
+require 'XLearn'
+opencv = xrequire 'opencv'
+oflow = xrequire 'opticalFlow'
 
-print([[
+if opencv then
+   opencv.test_calcOpticalFlow()
+else
+   print('please install opencv wrapper to see more (make USE_OPENCV=1)')
+end
+
+if oflow then
+
+   oflow.testme()
+
+   print([[
 
 To know more about these algos, start a Lua shell, and try:
 > require 'opticalFlow'
@@ -21,3 +32,7 @@ To know more about these algos, start a Lua shell, and try:
 > hsl = opticalFlow.field2rgb(flow_x, flow_y)
 > image.display(hsl)
 ]])
+else
+   print('please install 3rd party packages to see more (make USE_3RDPARTY=1)')
+end
+

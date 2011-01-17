@@ -4,7 +4,21 @@
 ----------------------------------
 
 require 'XLearn'
-require 'opencv'
+opencv = xrequire 'opencv'
+
+if not opencv then
+   error('please install opencv wrapper to see more (make USE_OPENCV=1)')
+end
+
+-- parse args
+op = OptionParser('%prog -s SOURCE [options]')
+op:add_option{'-s', '--source', action='store', dest='source', 
+              help='optional source, mostly to bypass camera: camera | lena'}
+op:add_option{'-t', '--type', action='store', dest='type', 
+              help='optional type, depends on the kind of source. for camera: opencv | camiface | v4linux'}
+op:add_option{'-c', '--camera', action='store', dest='camidx', 
+              help='if source=camera, you can specify the camera index: /dev/videoIDX [default=0]'}
+options,args = op:parse_args()
 
 -- need QT
 toolBox.useQT()
@@ -16,17 +30,17 @@ local ui = paths.thisfile('opencv-tester.ui')
 function demo()
 
    -- Camera frame
-   local camera = nn.ImageSource('camera')
+   local camera = nn.ImageSource(options.source or 'camera', options.type, options.camidx)
    local vframesat = torch.Tensor(640,480,3)
+   local previous = torch.Tensor(640,480,3)
    local cameraframe = torch.CharTensor(640,480,3)
 
    -- and results
    local frame = torch.CharTensor(640,480,1)
    local canny = torch.CharTensor(640,480,1)
    local sobel = torch.ShortTensor(640,480,1)
-   local previous = torch.CharTensor(640,480,1)
-   local motion_x = torch.FloatTensor((640-7)/20,(480-7)/20,1)
-   local motion_y = torch.FloatTensor((640-7)/20,(480-7)/20,1)
+   local flowhsl = torch.Tensor()
+   local flowrgb = torch.Tensor()
    local faces = {}
 
    -- Window
@@ -99,20 +113,38 @@ function demo()
 
       -- TEST 3 : Optic Flow
       if widget.radioButton_2.checked then
-         libopencv.calcOpticalFlow(frame, previous, motion_x, motion_y)
-         previous:copy(frame)
-         disp_oflow_x:show{ tensor=motion_x, painter=painter, 
+         local motion_n, motion_a = opencv.calcOpticalFlow{pair={previous:narrow(3,2,1),
+                                                                 vframe:narrow(3,2,1)},
+                                                           method='BM',
+                                                           shift_x=16, shift_y=16,
+                                                           block_w=7, block_h=7,
+                                                           window_w=35, window_h=35}
+
+         flowhsl:resize(motion_a:size(1), motion_a:size(2), 3)
+         flowhsl:select(3,1):copy(motion_a):div(360)
+         flowhsl:select(3,2):copy(motion_n):div(60)
+         flowhsl:select(3,3):fill(0.5)
+         image.hsl2rgb(flowhsl,flowrgb)
+         previous:copy(vframe)
+
+         disp_oflow_x:show{ tensor=flowrgb, painter=painter, 
                             globalzoom=zoom,
-                            min=-100, max=100,
-                            zoom=8,
-                            offset_x=800, offset_y=570,
-                            legend='Optic Flow - X' }
-         disp_oflow_y:show{ tensor=motion_y, painter=painter, 
+                            min=0, max=1,
+                            zoom=1,
+                            offset_x=800, offset_y=40,
+                            legend='Optic Flow - HSL-mapped (Hue=angle,Sat=norm)' }
+         disp_oflow_x:show{ tensor=motion_n, painter=painter, 
                             globalzoom=zoom,
-                            min=-100, max=100,
-                            zoom=8,
-                            offset_x=800, offset_y=780,
-                            legend='Optic Flow - Y' }
+                            min=0, max=100,
+                            zoom=1,
+                            offset_x=0, offset_y=560,
+                            legend='Optic Flow - Norm' }
+         disp_oflow_y:show{ tensor=motion_a, painter=painter, 
+                            globalzoom=zoom,
+                            min=0, max=1,
+                            zoom=1,
+                            offset_x=800, offset_y=560,
+                            legend='Optic Flow - Angle' }
       end
 
       -- TEST 4 : Face Detect
@@ -137,6 +169,8 @@ function demo()
 
       painter:grestore()
       painter:gend()
+
+      collectgarbage()
    end
 
    -- Loop Process

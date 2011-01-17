@@ -4,7 +4,13 @@
 -- computes disparities from a pair of stereo images
 --
 
-require 'stereo'
+require 'XLearn'
+stereo = xrequire 'stereo'
+
+if not stereo then
+   error('please install stereo package (make USE_3RDPARTY=1)')
+end
+
 stereo.testme()
 
 print([[
