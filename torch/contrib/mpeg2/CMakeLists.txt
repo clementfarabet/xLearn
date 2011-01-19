@@ -12,8 +12,7 @@ IF(MPEG2_FOUND)
   INCLUDE_DIRECTORIES(${MPEG2_INCLUDE_DIR})
   LINK_DIRECTORIES(${MPEG2_LIBRARY_DIRS}) 
   TARGET_LINK_LIBRARIES(mpeg2 luaT TH ${MPEG2_LIBRARIES})
-
 ELSE(MPEG2_FOUND)
-  MESSAGE(STATUS "Package mpeg2 not compiled because library MPEG2 was not found")
+   MESSAGE("WARNING: Could not find MPEG2 libraries, MPEG2 wrapper will not be installed")
 ENDIF(MPEG2_FOUND)
 

@@ -753,7 +753,7 @@ do
    function image.displayList(...)
       -- usage
       local _, images, zoom, min, max, offset_x, offset_y, 
-      legend, legends, window, window_w, window_h = toolBox.unpack(
+      legend, legends, window, window_w, window_h, font = toolBox.unpack(
          {...},
          'image.displayList',
          'displays a list of images on a 2D grid;\n' ..
@@ -768,7 +768,8 @@ do
          {arg='legends', type='string', help='individual legends'},
          {arg='window', type='gfx.Window', help='window descriptor'},
          {arg='win_w', type='number', help='window width', default=1000},
-         {arg='win_h', type='number', help='window height', default=700}
+         {arg='win_h', type='number', help='window height', default=700},
+         {arg='font', type='number', help='font size [default = 10*zoom]'}
       )
 
 
@@ -792,11 +793,11 @@ do
             local p
             for i=-1,1 do
                for j=-1,1 do
-                  p=painter:text(text, x*zoom+i, y*zoom+j, 12*zoom)
+                  p=painter:text(text, x*zoom+i, y*zoom+j, font or 12*zoom)
                end
             end
             p:set('penColor',{0,0,0})
-            painter:text(text, x*zoom, y*zoom, 12*zoom):set('penColor',{1,1,1})
+            painter:text(text, x*zoom, y*zoom, font or 12*zoom):set('penColor',{1,1,1})
          end
 
       -- display images
@@ -812,7 +813,7 @@ do
          end
          painter:blit(imageNormed, zoom, offset_x, offset_y)
          if legends and legends[i] then
-            boldtxt(legends[i], offset_x/zoom+5, offset_y+imageNormed:size(2)-3)
+            boldtxt(legends[i], offset_x/zoom+5, offset_y/zoom+imageNormed:size(2)-3)
          end
          offset_x = offset_x + imageNormed:size(1)*zoom
          if imageNormed:size(2) > max_height then
@@ -1050,19 +1051,20 @@ do
    function image.qtdisplaySegClasses(args)
       -- args
       toolBox.useQT()
-      local input = args.image or error 'please provide a tensor'
+      local height = args.height or 500
+      if args.image then height = args.image:size(2) end
       local classes = args.classes or error 'please provide a list of classes'
       local mergedClasses = args.mergedClasses
       local colormap = args.colorMap or image.createColorMap(#classes)
       local zoom = args.zoom or 1
       local legend = args.legend or 'segmentation'
       local painter = args.painter 
-         or qtwidget.newwindow(180*zoom, input:size(2)*zoom, legend)
+         or qtwidget.newwindow(180*zoom, height*zoom, legend)
 
       -- print classes
       painter:setfont(qt.QFont{serif=false,italic=false,size=10*zoom})
       painter:setcolor('black')
-      local height = math.floor(input:size(2) / #classes)
+      local height = math.floor(height / #classes)
       for i,class in ipairs(classes) do
          -- color box
          local color = torch.Tensor(1,1,3):copy(colormap:select(1,i))

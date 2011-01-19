@@ -59,37 +59,42 @@ do
       end
    end
 
-
+   function vid:mktempdir()
+      -- make cache
+      local date = os.date():gsub(' ','_')
+      local path_cache = paths.concat('scratch',date)
+      os.execute('mkdir -p ' .. path_cache)
+      return paths.concat(path_cache,'')
+   end
+      
    ----------------------------------------------------------------------
    -- loadChannel()
    -- loads a channel
    --
    function vid:loadChannel(channel, where)
-      -- make cache
-      local date = os.date():gsub(' ','_')
-      local path_cache = paths.concat('scratch',date)
-      os.execute('mkdir -p ' .. path_cache)
-      where.path = path_cache
+      where.path = self:mktempdir()
 
       -- file name format
       where.sformat = 'frame-%04d.'..self.fmt
 
       -- process video
       if self.path then 
-         os.execute('ffmpeg -i ' .. self.path .. 
-                    ' -r ' .. self.fps .. 
-                    ' -t ' .. self.length ..
-                    ' -map 0.' .. channel ..
-                    ' -s ' .. self.w .. 'x' .. self.h .. 
-                    ' -qscale 1' ..
-                    ' ' .. paths.concat(path_cache, where.sformat))
+	 local ffmpeg_cmd = 'ffmpeg -i ' .. self.path .. 
+	    ' -r ' .. self.fps .. 
+	    ' -t ' .. self.length ..
+	    ' -map 0.' .. channel ..
+	    ' -s ' .. self.w .. 'x' .. self.h .. 
+	    ' -qscale 1' ..
+	    ' ' .. paths.concat(where.path, where.sformat)
+	 print(ffmpeg_cmd)
+         os.execute(ffmpeg_cmd)
       end
 
       -- load Images
       local idx = 1
-      for file in paths.files(path_cache) do
+      for file in paths.files(where.path) do
          if file ~= '.' and file ~= '..' then
-            local fname = paths.concat(path_cache,string.format(where.sformat,idx))
+            local fname = paths.concat(where.path,string.format(where.sformat,idx))
             if not self.loaded then
                table.insert(where, fname)
             else
@@ -100,6 +105,22 @@ do
       end
    end
 
+   
+   ----------------------------------------------------------------------
+   -- get_frame
+   -- as there are two ways to store, you can't index self[1] directly
+   function vid:get_frame(c,i)
+      if self.loaded then
+	 return self[c][i]
+      else 
+	 if self.fmt == 'png' then 
+	    -- png is loaded in RGBA
+	    return image.load(self[c][i]):narrow(3,1,3)
+	 else
+	    return image.load(self[c][i])
+	 end
+      end
+   end
 
    ----------------------------------------------------------------------
    -- save()
@@ -223,12 +244,12 @@ do
       -- usage
       local _, zoom, savefname = toolBox.unpack(
          {...},
-         'video.imgs2YouTube3D',
+         'video.playYouTube3D',
          'plays a video:\n'
             .. ' + video must have been loaded with video.loadVideo()\n'
             .. ' + or else, it must be a list of pairs of tensors',
          {arg='zoom', type='number', help='zoom', default=1},
-         {arg='savefname', type='string', help='savefname [default=""]'}
+         {arg='savefname', type='string', help='filename in which output movie will be saved'}
       )
 
       -- enforce 16:9 ratio
@@ -236,6 +257,7 @@ do
       local w  = (h * 16 / 9)
       local w2 = w/2
       local frame = torch.Tensor(w,h,3)
+      print('Frame [' .. frame:size(1) .. ', ' .. frame:size(2) .. ', ' .. frame:size(3) .. ']')
 
       -- create output
       local outp = Video{width=w, height=h, fps=self.fps, 
@@ -256,6 +278,8 @@ do
             frameL = image.load(frameL)
             frameR = image.load(frameR)
          end
+	 print('FrameL [' .. frameL:size(1) .. ', ' .. frameL:size(2) .. ', ' .. frameL:size(3) .. ']')
+	 
          -- left
          if not (frameL:size(1) == w2 and frameL:size(2) == h) then
             image.scale(frameL,frame:narrow(1,1,w2),'bilinear')

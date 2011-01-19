@@ -85,7 +85,11 @@ if not opticalFlowLoaded then
            local flow_angle = torch.Tensor()
            flow_angle:resizeAs(flow_y):copy(flow_y):cdiv(flow_x):abs():atan():mul(180/math.pi)
            flow_angle:map2(flow_x, flow_y, function(h,x,y)
-                                              if x >= 0 and y >= 0 then
+                                              if x == 0 and y >= 0 then
+                                                 return 90
+                                              elseif x == 0 and y <= 0 then
+                                                 return 270
+                                              elseif x >= 0 and y >= 0 then
                                                  -- all good
                                               elseif x >= 0 and y < 0 then
                                                  return 360 - h

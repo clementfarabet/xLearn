@@ -63,10 +63,10 @@ knowledge of the CeCILL license and that you accept its terms.
 
 
 /* =============================================================== */
-void tensor_to_image(THTensor *tensor, 
-                     struct xvimage **r, 
-                     struct xvimage **g, 
-                     struct xvimage **b)
+static void tensor_to_image(THTensor *tensor, 
+                            struct xvimage **r, 
+                            struct xvimage **g, 
+                            struct xvimage **b)
 /* =============================================================== */
 {
   // idx
@@ -110,8 +110,8 @@ void tensor_to_image(THTensor *tensor,
 }
 
 /* =============================================================== */
-void image_to_tensor(struct xvimage *img, 
-                     THTensor **tensor)
+static void image_to_tensor(struct xvimage *img, 
+                            THTensor **tensor)
 /* =============================================================== */
 {
   // create output

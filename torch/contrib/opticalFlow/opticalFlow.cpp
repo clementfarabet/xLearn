@@ -13,7 +13,7 @@
 using namespace std;
 
 // conversion functions
-DImage *tensor_to_image(THTensor *tensor) {
+static DImage *tensor_to_image(THTensor *tensor) {
   // create output
   int w = tensor->size[0];
   int h = tensor->size[1]; 
@@ -35,7 +35,7 @@ DImage *tensor_to_image(THTensor *tensor) {
   return img;
 }
 
-THTensor *image_to_tensor(DImage *img) {
+static THTensor *image_to_tensor(DImage *img) {
   // create output
   THTensor *tensor = THTensor_newWithSize3d(img->width(), img->height(), img->nchannels());
 

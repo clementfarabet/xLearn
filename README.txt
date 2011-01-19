@@ -51,7 +51,7 @@ INSTALL
     install dependencies (compilation tools, cmake, QT4):
     $ sudo apt-get install binutils gcc g++ cmake libqt4-core libqt4-dev libqt4-gui libreadline5-dev libpcap-dev
 
-    optionally, install OpenCV 2.1, to get access to your webcam:
+    optionally, install OpenCV 2.x, to get access to extra packages:
     http://sourceforge.net/projects/opencvlibrary/files/opencv-unix/2.1/
 
 (1-MACOS)
@@ -64,6 +64,10 @@ INSTALL
     I'm keeping a working version here (installs in 5mins):
     http://data.clement.farabet.net/qt/qt-mac-cocoa-opensource-4.5.3.dmg
 
+    optionally, install OpenCV 2.x, to get access to extra packages
+    on Snow Leopard, that works: 
+    sudo port install opencv +sl_64bit
+
 (2-COMMON) 
     once the dependencies are installed, just run:
     $ [sudo] make install
@@ -73,5 +77,5 @@ INSTALL
     $ make
     for more info about the options/submodules
 
-    example of a local install, with one optional module:
-    $ make install INSTALL_PREFIX=~/local USE_OPENCV=1
+    example of a local install:
+    $ make install INSTALL_PREFIX=~/local

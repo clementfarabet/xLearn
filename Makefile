@@ -1,22 +1,24 @@
 .PHONY: build install help camiface luajit clean
 
 INSTALL_PREFIX=/usr/local
-USE_OPENCV=0
-USE_V4L2=0
-USE_CAMIFACE=0
-USE_NEUFLOW=0
-USE_3RDPARTY=0
-USE_XFLOW=0
-USE_JPEG=0
-USE_MPEG2=0
+USE_OPENCV=1
+USE_V4L2=1
+USE_CAMIFACE=1
+USE_NEUFLOW=1
+USE_3RDPARTY=1
+USE_XFLOW=1
+USE_JPEG=1
+USE_MPEG2=1
 USE_LUAJIT=0
 USE_THREAD=1
 USE_BIT=1
 EXPORT=xLearn-beta
 
+UNAME := $(shell uname)
+
 help:
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-	@-echo "usage (Linux/MacOS)"
+	@-echo "usage (Linux/MacOS):"
 	@-echo "  make [options] build     ? builds all the base/optional packages"
 	@-echo "  make [options] install   ? builds + installs all the packages"
 	@-echo "  make [options] export    ? exports the entire project into ${EXPORT}.tgz"
@@ -27,38 +29,40 @@ help:
 	@-echo "  INSTALL_PREFIX=/path/to/install/dir [default = /usr/local]"
 	@-echo "  EXPORT=filename  [default=xLearn-beta]"
 	@-echo ""
-	@-echo "  USE_OPENCV=1   [default=0]   ? OpenCV 2.x Lua wrapper (Linux webcam), requires OpenCV 2.x"
-	@-echo "  USE_V4L2=1     [default=0]   ? video4linux2 Lua wrapper (Linux webcam), requires V4L2"
-	@-echo "  USE_CAMIFACE=1 [default=0]   ? LibCamiface + Lua wrapper (MacOS webcam)"
-	@-echo "  USE_NEUFLOW=1  [default=0]   ? Compiler + DevTools for the NeuFlow arch"
-	@-echo "  USE_XFLOW=1    [default=0]   ? xFlow tools (xFlow parser/compiler + luaFlow framework)"
-	@-echo "  USE_3RDPARTY=1 [default=0]   ? 3rd party packages (stereo, segmentation, optical flow)"
-	@-echo "  USE_JPEG=1     [default=0]   ? LibJpeg wrapper"
-	@-echo "  USE_MPEG2=1    [default=0]   ? LibMpeg2 wrapper"
-	@-echo "  USE_BITOP=0    [default=1]   ? LuaBitOP library (bitwise operators for Lua)"
-	@-echo "  USE_THREAD=0   [default=1]   ? Multithreaded Lib for Lua, allows threads sharing the same Lua stack"
-	@-echo "  USE_LUAJIT=1   [default=0]   ? Replaces Lua by LuaJIT (Linux only)"
+	@-echo "  USE_OPENCV=1|0    [default="${USE_OPENCV}"]   ? OpenCV 2.x Lua wrapper (Linux webcam), requires OpenCV 2.x"
+	@-echo "  USE_V4L2=1|0      [default="${USE_V4L2}"]   ? video4linux2 Lua wrapper (Linux webcam), requires V4L2"
+	@-echo "  USE_CAMIFACE=1|0  [default="${USE_CAMIFACE}"]   ? LibCamiface + Lua wrapper (MacOS webcam)"
+	@-echo "  USE_NEUFLOW=1|0   [default="${USE_NEUFLOW}"]   ? Compiler + DevTools for the NeuFlow arch"
+	@-echo "  USE_XFLOW=1|0     [default="${USE_XFLOW}"]   ? xFlow tools (xFlow parser/compiler + luaFlow framework)"
+	@-echo "  USE_3RDPARTY=1|0  [default="${USE_3RDPARTY}"]   ? 3rd party packages (stereo, segmentation, optical flow)"
+	@-echo "  USE_JPEG=1|0      [default="${USE_JPEG}"]   ? LibJpeg wrapper"
+	@-echo "  USE_MPEG2=1|0     [default="${USE_MPEG2}"]   ? LibMpeg2 wrapper"
+	@-echo "  USE_BITOP=1|0     [default="${USE_BIT}"]   ? LuaBitOP library (bitwise operators for Lua)"
+	@-echo "  USE_THREAD=1|0    [default="${USE_THREAD}"]   ? Multithreaded Lib for Lua, allows threads sharing the same Lua stack"
+	@-echo "  USE_LUAJIT=1|0    [default="${USE_LUAJIT}"]   ? Replaces Lua by LuaJIT (Linux only)"
 	@-echo ""
 	@-echo "notes:"
-	@-echo "  LuaJIT is very experimental, and is not intended for development."
-	@-echo "  Installing it erases regular Lua libs, and QLua uses it by default."
-	@-echo "  (a make clean is also required when switching from one to the other)"
+	@-echo "  + LuaJIT is very experimental, and is not intended for development."
+	@-echo "    Installing it erases regular Lua libs, and QLua uses it by default."
+	@-echo "    (a make clean is also required when switching from one to the other)"
+	@-echo "  + All packages are now included by default (USE_***=1), and properly"
+	@-echo "    auto-detected by cmake. For instance, Camiface won't be installed"
+	@-echo "    on Linux, as it's only compatible with MacOS, while V4L2 will only"
+	@-echo "    be installed on Linux."
 	@-echo ""
 	@-echo "examples:"
-	@-echo "  local install, with OpenCV wrapper and JPEG lib wrapper:"
-	@-echo "    $ make INSTALL_PREFIX=~/local USE_OPENCV=1 USE_JPEG=1 install"
+	@-echo "  local install:"
+	@-echo "    $ make INSTALL_PREFIX=~/local install"
 	@-echo ""
-	@-echo "  root install, with OpenCV wrapper:"
-	@-echo "    $ sudo make USE_OPENCV=1 install"
+	@-echo "  root install, with no OpenCV wrapper:"
+	@-echo "    $ sudo make USE_OPENCV=0 install"
 	@-echo ""
-	@-echo "  dev build (the project is already built, just updating):"
+	@-echo "  update (the project is already built, just updating):"
+	@-echo "    $ git pull"
 	@-echo "    $ [sudo] make update"
 	@-echo ""
-	@-echo "  root install, including all tools for the neuFlow arch [linux only]"
-	@-echo "    $ sudo make USE_NEUFLOW=1 USE_V4L2=1 install"
-	@-echo ""
-	@-echo "  root install, including 3rd Party algos, and efficient LuaJIT interpreter [linux only]"
-	@-echo "    $ sudo make USE_3RDPARTY=1 USE_LUAJIT=1 install"
+	@-echo "  root install, replacing Lua by LuaJIT for improved perfs [linux only]"
+	@-echo "    $ sudo make USE_LUAJIT=1 install"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
 build: camiface luajit xflow
@@ -67,9 +71,13 @@ build: camiface luajit xflow
 
 camiface:
 ifeq (${USE_CAMIFACE},1)
+ifeq (${UNAME},Darwin)
 	@-echo "+++ installing camiface +++"
 	@-mkdir -p camiface/scratch
 	cd camiface/scratch && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} && make
+else
+	@-echo "+++ bypassing camiface [MacOS only] +++"
+endif
 endif
 
 luajit:

@@ -32,5 +32,7 @@ IF(PCAP_FOUND)
          TARGET_LINK_LIBRARIES(etherflow luaT TH ${PCAP_LIBRARIES})
        ENDIF(UNIX)
        ENDIF(APPLE)
+ELSE(PCAP_FOUND)
+   MESSAGE("WARNING: Could not find LibPCAP, etherflow [NeuFlow driver] will not be installed")
 ENDIF(PCAP_FOUND) 
 

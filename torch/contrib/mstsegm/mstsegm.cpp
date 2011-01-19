@@ -29,7 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #include "segment-image.h"
 
 // conversion functions
-image<rgb> *tensor_to_image(THTensor *tensor) {
+static image<rgb> *tensor_to_image(THTensor *tensor) {
   // create output
   image<rgb> *img = new image<rgb>(tensor->size[0], tensor->size[1], false);
 
@@ -46,7 +46,7 @@ image<rgb> *tensor_to_image(THTensor *tensor) {
   return img;
 }
 
-THTensor *image_to_tensor(image<rgb> *img) {
+static THTensor *image_to_tensor(image<rgb> *img) {
   // create output
   THTensor *tensor = THTensor_newWithSize3d(img->width(), img->height(), 3);
 
