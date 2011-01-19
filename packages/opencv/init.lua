@@ -1,4 +1,0 @@
-
-
--- C libs
-require 'libopencv'
