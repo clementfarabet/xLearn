@@ -16,6 +16,8 @@ EXPORT=xLearn-beta
 
 UNAME := $(shell uname)
 
+all: help build
+
 help:
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "usage (Linux/MacOS):"
@@ -65,9 +67,20 @@ help:
 	@-echo "    $ sudo make USE_LUAJIT=1 install"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
-build: camiface luajit xflow
+build: camiface luajit
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=0 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	@-echo ""
+	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+	@-echo "Build succesful, install with admin rights (in /usr/local):"
+	@-echo "$ [sudo] make install"
+	@-echo ""
+	@-echo "in any other dir:"
+	@-echo "$ make install INSTALL_PREFIX=/path/to/local/dir"
+	@-echo ""
+	@-echo "for more options:"
+	@-echo "$ make help"
+	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
 camiface:
 ifeq (${USE_CAMIFACE},1)
@@ -86,7 +99,7 @@ ifeq (${USE_LUAJIT},1)
 	cd luajit-torch && make && make install PREFIX=${INSTALL_PREFIX}
 endif
 
-xflow:
+ixflow:
 ifeq (${USE_XFLOW},1)
 	@-echo "+++ installing xFlow tools +++"
 	cd xFlow && make install INSTALL_PREFIX=${INSTALL_PREFIX}
@@ -98,10 +111,12 @@ extrabins:
 	@-cp "packages/debugger/luaD" ${INSTALL_PREFIX}"/bin/luaD"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/luaD"
 
-install: build extrabins
+install: build ixflow extrabins
 	@-cd torch/scratch && make install
 ifeq (${USE_CAMIFACE},1)
+ifeq (${UNAME},Darwin)
 	@-cd camiface/scratch && make install
+endif
 endif
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "Install complete, you should have access to:"
@@ -163,3 +178,21 @@ clean:
 	@-cd luajit-torch; make clean
 	@-rm -rf camiface/scratch
 	@-echo "+++ cleanup done +++"
+
+cleanall:
+	@-echo "+++ deep cleanup +++"
+	@-rm -rf trained-nets
+	@-rm -rf datasets
+	@-rm -rf scratch
+	@-rm -rf */scratch
+	@-rm -rf */*/scratch
+	@-rm -rf */*/*/scratch
+	@-rm -rf */*/*/*/scratch
+	@-rm -rf videos
+	@-rm -rf */videos
+	@-rm -rf */*/videos
+	@-rm -rf */*/*/videos
+	@-rm -rf */*/*/*/videos
+	@-cd luajit-torch; make clean
+	@-rm -rf camiface/scratch
+	@-echo "+++ deep cleanup done +++"

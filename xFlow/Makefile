@@ -12,6 +12,7 @@ help:
 install:
 	@-echo "+++ installing xFlow tools +++"
 	@-mkdir -p ${INSTALL_PREFIX}/share/xFlow/
+	@-mkdir -p ${INSTALL_PREFIX}/bin/
 	cp -r m4 emacs examples libraries  ${INSTALL_PREFIX}/share/xFlow/
 	cp xflow-translate ${INSTALL_PREFIX}/bin/
 	@-echo "--- installing xFlow tools ---"

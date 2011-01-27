@@ -70,11 +70,12 @@ INSTALL
 
 (2-COMMON) 
     once the dependencies are installed, just run:
+    $ make
     $ [sudo] make install
     for the default install
 
     or just
-    $ make
+    $ make help
     for more info about the options/submodules
 
     example of a local install:
