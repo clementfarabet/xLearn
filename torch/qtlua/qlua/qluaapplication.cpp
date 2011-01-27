@@ -90,6 +90,7 @@ public:
   QByteArray luaInput;
   QList<QObjectPointer> savedNamedObjects;
   QStringList filesToOpen;
+  bool classic;
 
   ~Private();
   Private(QLuaApplication *q);
@@ -111,6 +112,7 @@ public slots:
   void consoleBreak();
   void ttyInput(QByteArray ba);
   void ttyEndOfFile();
+  void setClassic(bool mode);
 };
 
 
@@ -260,7 +262,8 @@ QLuaApplication::Private::Private(QLuaApplication *q)
     forceVersion(false),
     elapsed(0),
     luaPrompt("> "),
-    luaPrompt2(">> ")
+    luaPrompt2(">> "),
+    classic(false)
 {
   programName = "qlua";
   aboutMessage = "<html>"
@@ -325,6 +328,7 @@ QLuaApplication::Private::printUsage()
            "  -nographics   disable all the graphical capabilities\n"
            "  -style s      set the application gui style 's'\n"
            "  -session s    restore gui session 's'\n"
+           "  -classic      set the interpreter to classic mode (multiline, using '=')\n"
 #ifdef Q_WS_X11
            "  -display d    set the X display (default is $DISPLAY)\n"
            "  -geometry g   set the main window size and position\n"
@@ -541,7 +545,8 @@ QLuaApplication::Private::processArguments(int argc, char **argv)
         case 'o':
         default:
           if (strcmp(s, "-nographics") &&
-              strcmp(s, "-onethread") )
+              strcmp(s, "-onethread") && 
+              strcmp(s, "-classic"))
             return printBadOption(s);
           break;
         }
@@ -767,6 +772,14 @@ QLuaApplication::Private::ttyInput(QByteArray ba)
           status = (strstr(msg, LUA_QL("<eof>")) == tp);
         }
       lua_pop(L, 1);
+
+      // ============================================================
+      // BEGIN_CLEM: avoiding multi-line statements in tty
+      // that allows simple statements to be directly evaled
+      // to have multi-line statements, use GUI
+      if (!this->classic) status = 0;
+      // END_CLEM
+      // ============================================================
     }
   // action
   if (status)
@@ -820,6 +833,13 @@ QLuaApplication::Private::runCommand(QByteArray cmd, bool ttyEcho)
 }
 
 
+void
+QLuaApplication::Private::setClassic(bool flag)
+{
+  this->classic = flag;
+}
+
+
 void 
 QLuaApplication::Private::ttyEndOfFile()
 {
@@ -866,12 +886,15 @@ capitalize(QString s)
   and leaves the remaining command line arguments alone. */
 
 QLuaApplication::QLuaApplication(int &argc, char **argv, 
-                                 bool guiEnabled, bool onethread)
+                                 bool guiEnabled, bool onethread, bool classic)
   : QApplication(argc, argv, guiEnabled),
     d(new Private(this))
 {
   // one thread only
   d->oneThread = onethread;
+
+  // classic mode ?
+  d->setClassic(classic);
 
   // extract program name
   QString cuteName = QFileInfo(applicationFilePath()).baseName();

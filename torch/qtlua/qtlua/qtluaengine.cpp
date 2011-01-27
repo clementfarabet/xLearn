@@ -1144,9 +1144,26 @@ lua_eval_func(lua_State *L)
   QtLuaEngine::Private *d = luaQ_private_noerr(L);
   d->errorHandlerFlag = false;
   lua_pushcfunction(L, lua_error_handler);
+  const char *cmd = lua_tostring(L, 1);
   int error = luaL_loadstring(L, lua_tostring(L, 1));
   if (! error)
     error = lua_pcall(L, 0, LUA_MULTRET, -2);
+
+  // ============================================================
+  // BEGIN_CLEM: added an iterative eval
+  //  > if previous call failed, try again with prepending 'return'
+  //  > that's great to get rid of '=' 
+  if (error==3) {
+    lua_settop(L, lua_gettop(L)-2);
+    QString ocmd = cmd;
+    QString ncmd = "return " + ocmd;
+    lua_pushcfunction(L, lua_error_handler);
+    luaL_loadstring(L, ncmd.toLocal8Bit().constData());
+    error = lua_pcall(L, 0, LUA_MULTRET, -2);
+  }
+  // END_CLEM
+  // ============================================================
+
   if (!d || d->printResults || (error && d->printErrors))
     luaQ_print(L, lua_gettop(L) - 2);
   if (error)

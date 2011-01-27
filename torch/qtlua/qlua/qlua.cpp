@@ -27,12 +27,12 @@ optionTakesArgument(const char *s)
   // keep this in sync as much as possible
   static const char *optionsWithArg[] =
     { // defined by Qt4.
-      "-style", "-session", "-stylesheet",
+      "-style", "-session", "-stylesheet", "-classic",
 #ifdef Q_WS_X11
       "-display", "-font", "-fn", "-button", "-btn",
       "-background", "-bg", "-foreground", "-fg",
       "-name", "-title", "-geometry", "-im", 
-      "-ncols", "-visual", "-inputstyle", 
+      "-ncols", "-visual", "-inputstyle",
 #endif
       // defined by QLuaApplication
       "-l", "-e",
@@ -64,6 +64,7 @@ main(int argc, char **argv)
   bool ide = false;
   QByteArray ideStyle;
   bool graphics = true;
+  bool classic = false;
   bool onethread = false;
   QVector<char*> args_for_both;
   char *displayName = 0;
@@ -82,6 +83,8 @@ main(int argc, char **argv)
         graphics = false;
       else if (!strcmp(s, "-onethread"))
         onethread = true;
+      else if (!strcmp(s, "-classic"))
+        classic = true;
       else if (optionIsIde(s, ideStyle))
         ide = true;
       else if (!strcmp(s, "-h") && argn <= 1)
@@ -110,7 +113,7 @@ main(int argc, char **argv)
 #endif
   
   // Create application object
-  QLuaApplication app(argc_for_both, argv_for_both, graphics, onethread);
+  QLuaApplication app(argc_for_both, argv_for_both, graphics, onethread, classic);
 
   // Construct arguments for lua
   int i = 0;

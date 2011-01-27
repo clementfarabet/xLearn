@@ -26,7 +26,7 @@ class QLUAAPI QLuaApplication : public QApplication
 public:
   ~QLuaApplication();
   QLuaApplication(int &argc, char **argv, 
-                  bool guiEnabled=true, bool oneThread=false);
+                  bool guiEnabled=true, bool oneThread=false, bool classic=true);
   int main(int argc, char **argv);
   static QLuaApplication *instance();
   static QLuaConsole *console();
