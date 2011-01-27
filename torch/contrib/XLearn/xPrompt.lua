@@ -4,7 +4,9 @@
 -- Most important > provides pretty() or p() to print lists !!!
 --------------------------------------------------------------------------------
 
+------------------------------------------------------------
 -- better prompt
+--
 local c = toolBox.COLORS
 -- CANT USE color because it fucks up the history ... WHY ???
 --_PROMPT = c.Red .. 'xLua' .. c.none .. ' > '
@@ -13,6 +15,49 @@ _PROMPT = 'xLua > '
 _PROMPT2 = ' ... > '
 c = nil
 
+------------------------------------------------------------
+-- overwrite print function to expand tables
+--
+lua_print = print
+print = function(obj)
+           if type(obj) == 'table' then
+              local mt = getmetatable(obj)
+              if mt and mt.__tostring__ then
+                 lua_print(mt.__tostring__(obj))
+              else
+                 local tos = tostring(obj)
+                 if tos and not string.find(tos,'table: ') then
+                    io.write(tos .. ':\n')
+                 end
+                 io.write('{')
+                 local tab = ''
+                 local idx = 1
+                 for k,v in pairs(obj) do
+                    if idx > 1 then io.write(',\n') end
+                    if type(v) == 'userdata' then
+                       io.write(tab .. '[' .. k .. ']' .. ' = <userdata>')
+                    else
+                       local tostr = tostring(v):gsub('\n','\\n')
+                       if #tostr>40 then
+                          local tostrshort = tostr:sub(1,40)
+                          io.write(tab .. '[' .. k .. ']' .. ' = ' .. tostrshort .. ' ... ')
+                       else
+                          io.write(tab .. '[' .. k .. ']' .. ' = ' .. tostr)
+                       end
+                    end
+                    tab = ' '
+                    idx = idx + 1
+                 end
+                 lua_print('}')
+              end
+           else 
+              lua_print(obj) 
+           end
+        end
+
+------------------------------------------------------------
+-- the following defines a pretty print for tables
+--
 local print_handlers = {}
 local jstack = {}
 

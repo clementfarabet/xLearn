@@ -31,6 +31,7 @@ if not opticalFlowLoaded then
    require 'XLearn'
    opticalFlow = {}
 
+   
    -- register functions
    opticalFlow.infer 
       = function(args)
@@ -76,31 +77,30 @@ if not opticalFlowLoaded then
                                                               nOuterFPIterations, nInnerFPIterations,
                                                               nCGIterations)
 
-           -- compute norm:
-           local flow_norm = torch.Tensor()
-           local x_squared = torch.Tensor():resizeAs(flow_x):copy(flow_x):cmul(flow_x)
-           flow_norm:resizeAs(flow_y):copy(flow_y):cmul(flow_y):add(x_squared):sqrt()
+	   local flow_norm  = opticalFlow.computeNorm(flow_x,flow_y)
+	   local flow_angle = opticalFlow.computeAngle(flow_x,flow_y)
 
-           -- compute angle:
-           local flow_angle = torch.Tensor()
-           flow_angle:resizeAs(flow_y):copy(flow_y):cdiv(flow_x):abs():atan():mul(180/math.pi)
-           flow_angle:map2(flow_x, flow_y, function(h,x,y)
-                                              if x == 0 and y >= 0 then
-                                                 return 90
-                                              elseif x == 0 and y <= 0 then
-                                                 return 270
-                                              elseif x >= 0 and y >= 0 then
-                                                 -- all good
-                                              elseif x >= 0 and y < 0 then
-                                                 return 360 - h
-                                              elseif x < 0 and y >= 0 then
-                                                 return 180 - h
-                                              elseif x < 0 and y < 0 then
-                                                 return 180 + h
-                                              end
-                                           end)
            -- return results
            return flow_norm, flow_angle, warp, flow_x, flow_y
+        end
+
+   -- warper
+   opticalFlow.warp
+      = function(...)
+           local args, inp, vx, vy = toolBox.unpack(
+              {...},
+              'opticalFlow.warp', 
+              'warps an image according to a flow field:\n'
+                 ..'if flow was computed from img1->img2, then warp(img2,vx,vy) will compute\n'
+                 ..'a reconstruction of img1',
+              {arg='image', type='torch.Tensor', help='input image (WxHxN tensor)', req=true},
+              {arg='flow_x', type='torch.Tensor', help='x component of flow field', req=true},
+              {arg='flow_y', type='torch.Tensor', help='y component of flow field', req=true}
+           )
+           if inp:nDimension() ~= 3 then
+              error(args.usage)
+           end
+           return libopticalFlow.warp(inp, vx, vy)
         end
 
    -- test me
@@ -139,6 +139,57 @@ if not opticalFlowLoaded then
 
            return resn, resa, warp
         end
+
+   -- compute norm from x,y:
+   opticalFlow.computeNorm
+      = function(flow_x,flow_y)
+	   -- check args
+           if not flow_x or not flow_y then
+              error(
+                 toolBox.usage('opticalFlow.computeNorm',
+                               'computes norm (size) of flow field from flow_x and flow_y,\n',
+                               nil,
+                               {type='torch.Tensor', help='flow field (x), (WxH)', req=true},
+                               {type='torch.Tensor', help='flow field (y), (WxH)', req=true}))
+           end
+           local flow_norm = torch.Tensor()
+           local x_squared = torch.Tensor():resizeAs(flow_x):copy(flow_x):cmul(flow_x)
+           flow_norm:resizeAs(flow_y):copy(flow_y):cmul(flow_y):add(x_squared):sqrt()
+	   return flow_norm
+	end
+
+   -- compute angle from x,y:
+   opticalFlow.computeAngle
+      = function(flow_x,flow_y)
+	   -- check args
+           if not flow_x or not flow_y then
+              error(
+                 toolBox.usage('opticalFlow.computeAngle',
+                               'computes angle (direction) of flow field from flow_x and flow_y,\n',
+                               nil,
+                               {type='torch.Tensor', help='flow field (x), (WxH)', req=true},
+                               {type='torch.Tensor', help='flow field (y), (WxH)', req=true}))
+           end
+	   local flow_angle = torch.Tensor()
+           flow_angle:resizeAs(flow_y):copy(flow_y):cdiv(flow_x):abs():atan():mul(180/math.pi)
+           flow_angle:map2(flow_x, flow_y, function(h,x,y)
+                                              if x == 0 and y >= 0 then
+                                                 return 90
+                                              elseif x == 0 and y <= 0 then
+                                                 return 270
+                                              elseif x >= 0 and y >= 0 then
+                                                 -- all good
+                                              elseif x >= 0 and y < 0 then
+                                                 return 360 - h
+                                              elseif x < 0 and y >= 0 then
+                                                 return 180 - h
+                                              elseif x < 0 and y < 0 then
+                                                 return 180 + h
+                                              end
+                                           end)
+	   return flow_angle
+	end
+
 
    -- generate colored version of flow fields
    opticalFlow.field2rgb

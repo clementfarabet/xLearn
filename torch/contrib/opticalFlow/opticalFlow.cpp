@@ -2,8 +2,15 @@
 // To load this lib in LUA:
 // require 'libopticalFlow'
 
+#ifdef LUAJIT
+ extern "C" {
 #include <luaT.h>
 #include <TH.h>
+ }
+#else
+#include <luaT.h>
+#include <TH.h>
+#endif
 
 #include "project.h"
 #include "Image.h"
@@ -99,9 +106,40 @@ int optflow_lua(lua_State *L) {
   return 3;
 }
 
+int warp_lua(lua_State *L) {
+  // get args
+  THTensor *ten_inp = (THTensor *)luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *ten_vx = (THTensor *)luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *ten_vy = (THTensor *)luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+
+  // copy tensors to images
+  DImage *input = tensor_to_image(ten_inp);
+  DImage *vx = tensor_to_image(ten_vx);
+  DImage *vy = tensor_to_image(ten_vy);
+
+  // declare outputs, and process
+  DImage warpedInput;
+  OpticalFlow::warpFL(warpedInput,   // warped input
+                      *input,*input, // input
+                      *vx, *vy         // flow
+                      );
+
+  // return result
+  THTensor *ten_warp = image_to_tensor(&warpedInput);
+  luaT_pushudata(L, ten_warp, luaT_checktypename2id(L, "torch.Tensor"));
+
+  // cleanup
+  delete(input);
+  delete(vx);
+  delete(vy);
+
+  return 1;
+}
+
 // Register functions in LUA
 static const struct luaL_reg opticalFlow [] = {
   {"infer", optflow_lua},
+  {"warp", warp_lua},
   {NULL, NULL}  /* sentinel */
 };
 

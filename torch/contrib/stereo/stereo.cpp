@@ -19,8 +19,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 // To load this lib in LUA:
 // require 'libstereo'
 
+#ifdef LUAJIT
+ extern "C" {
 #include <luaT.h>
 #include <TH.h>
+ }
+#else
+#include <luaT.h>
+#include <TH.h>
+#endif
 
 #include <cstdio>
 #include <iostream>

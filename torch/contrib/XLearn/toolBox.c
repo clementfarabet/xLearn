@@ -268,6 +268,290 @@ int toolbox_dist2vectors(lua_State *L){
   return 1;
 }
 
+
+/*
+ * This function perfoms convolution between 3D tensors 
+ * in a fixed point manner -  to imitate the convolution 
+ * on the hardware.
+ *  The function receives as an input: output, input, kernel.
+ * The convolution is performed between input and kernel and
+ * then stored in output.
+ */
+
+int toolbox_convFixedPoint(lua_State *L){
+  /* get the arguments */
+  THTensor * output = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * input = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * kernel = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+
+  double * data_output = output->storage->data+ output->storageOffset;
+  double * data_input = input->storage->data+ input->storageOffset;
+  double * data_kernel = kernel->storage->data+ kernel->storageOffset;
+
+  int size_output_c = output->size[0];
+  int size_output_r = output->size[1];
+  int size_output_m = output->size[2];
+  if (output->nDimension < 3)
+    size_output_m = 1;
+
+  int size_input_c = input->size[0];
+  int size_input_r = input->size[1];
+  int size_input_m = input->size[2];
+  if (input->nDimension < 3)
+    size_input_m = 1;
+
+  int size_kernel_c = kernel->size[0];
+  int size_kernel_r = kernel->size[1];
+  int size_kernel_m = kernel->size[2];
+  if (kernel->nDimension < 3)
+    size_kernel_m = 1;
+
+  int i,j,k,l,m;
+  
+  // DEBUG
+  /* printf("input dim = %d, output dim = %d, kernel dim = %d\n", input->nDimension, output->nDimension, kernel->nDimension); */
+/*   printf("input->stride[0] = %d, input->stride[1] = %d, input->stride[2] = %d\n", input->stride[0], input->stride[1], input->stride[2]); */
+/*   printf("size_output_c = %d, size_output_r = %d, maps = %d\n", size_output_c, size_output_r, size_output_m); */
+/*   printf("size_input_c = %d, size_input_r = %d, maps = %d\n", size_input_c, size_input_r, size_input_m); */
+/*   printf("size_kernel_c = %d, size_kernel_r = %d, maps = %d\n", size_kernel_c, size_kernel_r, size_kernel_m); */
+  
+  double* ptr_i;
+  double* ptr_k;
+  double* ptr_o;
+  // DEBUG
+  /* printf("data_input:\n"); */
+/*   ptr_i = data_input; */
+/*   for (m = 0; m < size_input_m; m++){ */
+/*     for (i = 0; i < size_input_r; i++){ */
+/*       for (j = 0; j < size_input_c; j++){ */
+/* 	printf("%.4f ", ptr_i[j*input->stride[0]]); */
+/*       } */
+/*       ptr_i = ptr_i + input->stride[1]; */
+/*       printf("\n"); */
+/*     } */
+/*     printf("\n"); */
+/*   } */
+
+/*   printf("data_kernel:\n"); */
+/*   ptr_k = data_kernel; */
+/*   for (m = 0; m < size_kernel_m; m++){ */
+/*     for (i = 0; i < size_kernel_r; i++){ */
+/*       for (j = 0; j < size_kernel_c; j++){ */
+/* 	printf("%.4f ", ptr_k[j*kernel->stride[0]]); */
+/*       } */
+/*       ptr_k = ptr_k + kernel->stride[1]; */
+/*       printf("\n"); */
+/*     } */
+/*     printf("------ %d ------\n", m); */
+/*   } */
+  
+/*   printf("data_output:\n"); */
+/*   ptr_o = data_output; */
+/*   for (i = 0; i < size_output_r; i++){ */
+/*     for (j = 0; j < size_output_c; j++){ */
+/*       printf("%.4f ", ptr_o[j*output->stride[0]]); */
+/*     } */
+/*     ptr_o = ptr_o + output->stride[1]; */
+/*     printf("\n"); */
+/*  } */
+  
+  int* input_int = (int*)malloc(sizeof(int)*size_input_c*size_input_r*size_input_m);
+  int* output_int = (int*)malloc(sizeof(int)*size_output_c*size_output_r*size_output_m);
+  int* kernel_int = (int*)malloc(sizeof(int)*size_kernel_c*size_kernel_r*size_kernel_m);
+
+
+  // convert to fixed point (mult 256 and store in int)
+  ptr_i = data_input;
+  for(m = 0; m < size_input_m; m++){
+    for (i = 0; i < size_input_r; i++){
+      for (j = 0; j < size_input_c; j++){
+	*(input_int + i + j*size_input_r + m*input->stride[2])=  round(ptr_i[j*input->stride[0]] * 256);
+      }
+      ptr_i += input->stride[1];
+    }
+  }
+  
+  ptr_k = data_kernel;
+  for(m = 0; m < size_kernel_m; m++){
+    for (i = 0; i < size_kernel_r; i++){
+      for (j = 0; j < size_kernel_c; j++){
+	*(kernel_int + i + j*size_kernel_r) = round(ptr_k[j*kernel->stride[0]] * 256);
+	//printf("%d ", *(kernel_int + i + j*size_kernel_r));
+      }
+      ptr_k += kernel->stride[1];
+      //printf("\n");
+    }
+  }
+  
+  // inialize the output
+  for (m = 0; m < size_output_m; m++){
+    for (i = 0; i < size_output_r; i++){
+      for (j = 0; j < size_output_c; j++){
+	*(output_int + i + j*size_output_r + m*output->stride[2]) = 0;
+      }
+    }
+  }
+  
+  
+  // convolution
+  // using the formula:
+  //output[i][j][k] = sum_l sum_{s=1}^kW sum_{t=1}^kH weight[s][t][l][k] * input[dW*(i-1)+s)][dH*(j-1)+t][l]
+  for (m = 0; m < size_output_m; m++){
+    for (i = 0; i < size_output_r; i++){
+      for (j = 0; j < size_output_c; j++){
+	int sum = 0;
+	for (k = 0; k < size_kernel_r; k++){
+	  for (l = 0; l < size_kernel_c; l++){
+	    int in_i = i + k;
+	    int in_j = j + l;
+	    //DEBUG
+	    //printf("i = %d, j = %d, k = %d, l = %d, in_i = %d, in_j = %d\n", i, j, k, l, in_i, in_j);
+	    //int res = *(kernel_int + l + k*size_kernel_c) *
+	    //  *(input_int + in_i + in_j*size_input_c);
+	    
+	    int res = *(kernel_int + l + k*size_kernel_r) *
+	      *(input_int + in_i + in_j*size_input_r + m*input->stride[2]);
+	    
+	    sum += res;
+	    
+	  }
+	}
+	
+	double sum_d = sum / 256.0;
+	sum = round(sum_d);
+	
+	*(output_int + i + j*size_output_r + m*output->stride[2]) += sum;
+      }
+    }
+  }
+  
+  
+
+  // copy the result to output and scale it back to double
+  ptr_o = data_output;
+  for (m = 0; m < size_output_m; m++){
+    for (i = 0; i < size_output_r; i++){
+      for (j = 0; j < size_output_c; j++){
+	ptr_o[j*output->stride[0]] = *(output_int + i + j*size_output_r + m*output->stride[2]);
+	ptr_o[j*output->stride[0]] /= 256.0;
+      }
+      ptr_o += output->stride[1];
+    }
+  }
+  
+  // free the allocated memory
+  free(input_int);
+  free(output_int);
+  free(kernel_int);
+  
+  return 0;
+}
+
+
+/* 
+ * This function perfoms a linear mapping (ax+b)
+ * in a fixed point maaner - to imitate map on hardware.
+ *  The function reseives as an input: ( output, input, linear_segments).
+ * Linear segments reseived here in form of a tensor num_of_segs x 3.
+ * seg[0] - min value, seg[1] - a, seg[2] - b.
+ * The input and segments is considered to be in fixed point: 
+ * (intup:mul(256); input:add(0.5); input:floor()).
+ * ax+b in fixed point calculations is performed on each value of input
+ * and the result is stored in output.
+ */
+int toolbox_mapFixedPoint(lua_State *L){
+  /* get the arguments */
+  THTensor * output = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * input = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * seg = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+
+  double * data_output = output->storage->data+ output->storageOffset;
+  double * data_input = input->storage->data+ input->storageOffset;
+  double * data_seg = seg->storage->data+ seg->storageOffset;
+
+  int size_output_c = output->size[0];
+  int size_output_r = output->size[1];
+  int size_output_m = output->size[2];
+  if (output->nDimension < 3)
+    size_output_m = 1;
+
+  int size_input_c = input->size[0];
+  int size_input_r = input->size[1];
+  int size_input_m = input->size[2];
+  if (input->nDimension < 3)
+    size_input_m = 1;
+
+  int size_seg_c = seg->size[0];
+  int size_seg_r = seg->size[1];
+  int i,j,k,l,m;
+  
+  // DEBUG
+  /* printf("input dim = %d, output dim = %d, seg dim = %d\n", input->nDimension, output->nDimension, seg->nDimension); */
+/*   printf("input->stride[0] = %d, input->stride[1] = %d, input->stride[2] = %d\n", input->stride[0], input->stride[1], input->stride[2]); */
+/*   printf("size_output_c = %d, size_output_r = %d, maps = %d\n", size_output_c, size_output_r, size_output_m); */
+/*   printf("size_input_c = %d, size_input_r = %d, maps = %d\n", size_input_c, size_input_r, size_input_m); */
+/*   printf("size_seg_c = %d, size_seg_r = %d\n", size_seg_c, size_seg_r); */
+ 
+
+  double* ptr_i;
+  double* ptr_s;
+  double* ptr_o;
+
+  //for linear approx we do:
+  //       linear = a*t + b
+  // now we want to use fixed point linear approx:
+  //
+  // a_fixed = round(a*256)
+  // t_fixed = round(t*256)
+  // at_fixed = floor(a_fixed*t_fixed/256)
+  // b_fixed = round(b*256)
+  // linear_fixed = at_fixed + b_fixed
+  // 
+  // and go back:
+  //
+  // linear = linear_fixed/256
+  //
+  // note: we use floor for at_fixed because hardware 
+  // does floor instead of round (which should be fixed really)
+
+
+  
+  ptr_o = data_output;
+  ptr_i = data_input;
+  for (m = 0; m < size_output_m; m++){
+    for (i = 0; i < size_output_r; i++){
+      for (j = 0; j < size_output_c; j++){
+	
+	int found_idx = 0;
+	ptr_s = data_seg;
+	for (k = 0; k < size_seg_r; k++){
+	  if (ptr_i[j*input->stride[0]] >= ptr_s[0]){
+	    found_idx = k;
+	    k = size_seg_r;// break
+	  }
+	  ptr_s += seg->stride[1];
+	}
+	
+	ptr_s = data_seg + found_idx*seg->stride[1];
+	
+	// DEBUG 
+	//printf("input == %f, found_idx = %d, min = %f, a = %f, b = %f\n",
+	//	     ptr_i[j*input->stride[0]], found_idx, ptr_s[0], ptr_s[1], ptr_s[2] );
+	
+	ptr_o[j*output->stride[0]] = floor(ptr_i[j*input->stride[0]] * 
+					   ptr_s[1]/256.0) + ptr_s[2];
+	ptr_o[j*output->stride[0]] /= 256.0;
+      }
+      ptr_o += output->stride[1];
+      ptr_i += input->stride[1];
+    }
+  }
+
+  return 0;
+}
+
+
+
 /*
  * Converts an RGB color value to HSL. Conversion formula
  * adapted from http://en.wikipedia.org/wiki/HSL_color_space.

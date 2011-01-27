@@ -5,6 +5,7 @@
 --------------------------------------------------------------------------------
 do
    local vid = torch.class('Video')
+   local vid_format = 'frame-%06d.'
 
    ----------------------------------------------------------------------
    -- __init()
@@ -59,36 +60,52 @@ do
       end
    end
 
-   function vid:mktempdir()
-      -- make cache
-      local date = os.date():gsub(' ','_')
-      local path_cache = paths.concat('scratch',date)
-      os.execute('mkdir -p ' .. path_cache)
-      return paths.concat(path_cache,'')
+   -- make name for disk cache from ffmpeg
+   function vid:mktemppath(c)
+      local sdirname = paths.basename(self.path) .. '_' .. 
+      self.fps .. 'fps_' .. 
+      self.w .. 'x' .. self.h .. '_' .. 
+      self.length .. 's_c' .. 
+      c .. '_' .. self.fmt 
+
+      local path_cache = paths.concat('scratch',sdirname)
+      return path_cache
    end
-      
+
    ----------------------------------------------------------------------
    -- loadChannel()
    -- loads a channel
    --
    function vid:loadChannel(channel, where)
-      where.path = self:mktempdir()
-
+      where.path = self:mktemppath(channel)
       -- file name format
-      where.sformat = 'frame-%04d.'..self.fmt
-
-      -- process video
-      if self.path then 
-	 local ffmpeg_cmd = 'ffmpeg -i ' .. self.path .. 
-	    ' -r ' .. self.fps .. 
-	    ' -t ' .. self.length ..
-	    ' -map 0.' .. channel ..
-	    ' -s ' .. self.w .. 'x' .. self.h .. 
-	    ' -qscale 1' ..
-	    ' ' .. paths.concat(where.path, where.sformat)
-	 print(ffmpeg_cmd)
-         os.execute(ffmpeg_cmd)
+      where.sformat = vid_format .. self.fmt
+      
+      -- Only make cache dir and process video, if dir does not exist
+      -- or if the source file is newer than the cache.  Could have
+      -- flag to force processing.
+      local sfile = paths.concat(where.path,string.format(where.sformat,1))
+      if not paths.dirp(where.path)
+         or not paths.filep(sfile)
+         or toolBox.ftime(self.path) > toolBox.ftime(sfile)
+      then
+	 -- make disk cache dir
+	 os.execute('mkdir -p ' .. where.path) 
+	 -- process video
+	 if self.path then 
+	    local ffmpeg_cmd = 'ffmpeg -i ' .. self.path .. 
+	       ' -r ' .. self.fps .. 
+	       ' -t ' .. self.length ..
+	       ' -map 0.' .. channel ..
+	       ' -s ' .. self.w .. 'x' .. self.h .. 
+	       ' -qscale 1' ..
+	       ' ' .. paths.concat(where.path, where.sformat)
+	    print(ffmpeg_cmd)
+	    os.execute(ffmpeg_cmd)
+	 end
       end
+
+      print('Using frames in ' .. paths.concat(where.path, where.sformat))
 
       -- load Images
       local idx = 1
@@ -103,6 +120,9 @@ do
             idx = idx + 1
          end
       end
+
+      -- update nb of frames
+      self.nframes = #where
    end
 
    
@@ -122,18 +142,106 @@ do
       end
    end
 
+
+   ----------------------------------------------------------------------
+   -- forward
+   -- a simple forward() method, that returns the next frame(s) available
+   function vid:forward()
+      -- current pointer
+      self.current = self.current or 1
+      -- nb channels
+      local nchannels = #self
+      if nchannels == 1 then
+         -- get next frame
+         self.output = self.output or torch.Tensor()
+         local nextframe = self:get_frame(1,self.current)
+         self.output:resizeAs(nextframe):copy(nextframe)
+      else
+         -- get next frames
+         self.output = self.output or {}
+         for c = 1,nchannels do
+            local nextframe = self:get_frame(c,self.current)
+            self.output[c] = self.output[c] or torch.Tensor()
+            self.output[c]:resizeAs(nextframe):copy(nextframe)
+         end
+      end
+      self.current = self.current + 1
+      if self.current > #self[1] then self.current = 1 end
+      return self.output
+   end
+
+
    ----------------------------------------------------------------------
    -- save()
+   -- save the video with all the channels into AVI format
    --
-   function vid:save(opath)
+   function vid:save(...)
+      -- usage
+      local args, outpath = toolBox.unpack(
+         {...},
+         'video.saveVideo',
+         'save all the frames into a video file:\n'
+            .. ' + video must have been loaded with video.loadVideo()\n'
+            .. ' + or else, it must be a list of tensors',
+         {arg='outpath', type='string', help='path to save the video', default=''}
+      )
+      -- check outpath
+      if outpath == '' then
+         local c = toolBox.COLORS
+         error(c.Red .. 'You must provide a path to save the video' .. c.none)
+      end
+
+      local format = vid_format .. self.fmt
+      local nchannels = #self
+
+      -- dump png if content is in ram
+      if self.loaded then
+         print('Dumping Frames into Disk...')
+         local nchannels = #self
+         for c = 1,nchannels do
+            -- set the channel path if needed
+            local fmt = self.fmt
+            self.fmt = 'png'
+            self[c].path = self:mktemppath(c-1)
+            format = vid_format .. 'png'
+            self.fmt = fmt
+            -- remove if dir exists
+            if paths.dirp(self[c].path) then
+               os.execute('rm -rf ' .. self[c].path)
+            end
+            os.execute('mkdir -p ' .. self[c].path)
+            for i,frame in ipairs(self[c]) do
+               toolBox.dispProgress(i,#self[c])
+               local ofname = paths.concat(self[c].path, string.format(format, i))
+               image.save(ofname,frame)
+            end
+         end
+      end
       -- warning: -r must come before -i
-      local ffmpeg_cmd =  ('ffmpeg' ..
-                           ' -r ' .. self.fps ..
-                           ' -i ' .. paths.concat(self[1].path, self[1].sformat) ..
-                           ' -vcodec mjpeg -qscale 1 -an ' ..
-                           ' ' .. opath .. '.avi')
+      local ffmpeg_cmd =  ('ffmpeg -r ' .. self.fps)
+      for c = 1,nchannels do
+         ffmpeg_cmd = (ffmpeg_cmd ..
+                       ' -i ' .. paths.concat(self[c].path, format))
+      end
+      ffmpeg_cmd = ffmpeg_cmd .. ' -vcodec mjpeg -qscale 1 -an ' .. outpath .. '.avi'
+      for c = 2,nchannels do
+         ffmpeg_cmd = (ffmpeg_cmd ..
+                       '  -vcodec mjpeg -qscale 1 -an  -newvideo')
+      end
+
+      -- overwrite the file
+      if paths.filep(outpath .. '.avi') then
+         print('WARNING: ' .. outpath .. '.avi exist and will be overwritten...')
+         os.execute('rm -rf ' .. outpath .. '.avi')
+      end
+         
       print(ffmpeg_cmd)
       os.execute(ffmpeg_cmd)
+
+      -- cleanup disk
+      if self.loaded then
+         self:clear()
+      end
    end
 
 

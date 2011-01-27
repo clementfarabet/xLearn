@@ -744,14 +744,18 @@ function math.approx(args)
    local filename = 'coef_'..args.name
    local coefs
    local filepath = coefpath..'/'..filename
-   
+   local verbose = args.verbose
+
    if (file_exists(filepath)) then 
-      print('# reading from file segments for: ', filename)
+      if verbose then print('# reading from file segments for: ', filename) end
       coefs = read_coefs(filepath)
    else
-      print('# there are no segments for requested mapping, generating segments for: ', filename)
+      if verbose then 
+         print('# there are no segments for requested mapping, generating segments for: ', 
+               filename)
+         print('# caching segments to file: ', filename)
+      end
       coefs = math.approx2(args)
-      print('# caching segments to file: ', filename)
       write_coefs(coefs, filepath)
    end
    return coefs

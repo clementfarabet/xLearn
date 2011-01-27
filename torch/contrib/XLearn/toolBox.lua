@@ -529,6 +529,18 @@ end
 toolBox.OS = toolBox.getOS()
 
 --------------------------------------------------------------------------------
+-- toolBox.ftime()
+-- get modify time of file
+--------------------------------------------------------------------------------
+function toolBox.ftime(file)
+   if toolBox.OS == 'macos' then
+      return tonumber(toolBox.exec('stat -f "%m" ' .. file))
+   elseif toolBox.OS == 'linux' then
+      return tonumber(toolBox.exec('stat -c "%Z" ' .. file))
+   end
+end
+
+--------------------------------------------------------------------------------
 -- toolBox.fileExists()    
 -- test if a file exist 
 --------------------------------------------------------------------------------
@@ -563,8 +575,8 @@ do
       end
    end
    function listDir:__tostring__()
-      os.execute('ls '..self.flags)
-      return '_ls_'
+      local res = toolBox.exec('ls '..self.flags)
+      return '\n' .. res
    end
 end
 ls = listDir('')

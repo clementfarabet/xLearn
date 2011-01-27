@@ -30,7 +30,8 @@ extern int toolbox_createTable(lua_State *L);
 extern int toolbox_getMicroTime(lua_State *L);
 extern int toolbox_spatialDist(lua_State *L);
 extern int toolbox_dist2vectors(lua_State *L);
-
+extern int toolbox_convFixedPoint(lua_State *L);
+extern int toolbox_mapFixedPoint(lua_State *L);
 /*
 extern int toolbox_ncursePrint(lua_State *L);
 extern int toolbox_ncurseStart(lua_State *L);
@@ -53,6 +54,8 @@ static const struct luaL_reg extraroutines [] = {
   {"spatialDist", toolbox_spatialDist},
   {"createTable", toolbox_createTable},
   {"Dist2",toolbox_dist2vectors},
+  {"convFixedPoint",toolbox_convFixedPoint},
+  {"mapFixedPoint",toolbox_mapFixedPoint},
   {"image_maskToRGB", image_maskToRGB},
   {"rgb2hsl", image_rgb2hsl},
   {"hsl2rgb", image_hsl2rgb},

@@ -75,6 +75,7 @@ if not xLearnLoaded then
    torch.include('XLearn', 'Replicate.lua')
    torch.include('XLearn', 'ContrastNormalization.lua')
    torch.include('XLearn', 'LocalNorm.lua')
+   torch.include('XLearn', 'LocalNorm_hardware.lua')
    torch.include('XLearn', 'LocalConnected.lua')
    torch.include('XLearn', 'SpatialPadding.lua')
    torch.include('XLearn', 'LcEncoder.lua')

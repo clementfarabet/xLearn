@@ -36,6 +36,7 @@ SET(luasrc AbsModule.lua
            CCSub.lua
            LocalConnected.lua
            LocalNorm.lua
+	   LocalNorm_hardware.lua	
            MSECriterionHessian.lua
 	   NllCriterion.lua
            OptionParser.lua

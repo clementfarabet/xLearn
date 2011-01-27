@@ -776,7 +776,7 @@ function CoreUser:normKernel(kernel, sum)
    kernel:div(kernel:sum()):mul(sum)
    local m = 0
    local n = 0
-   local s = false
+   local switch = false
    local inc
    while true do
       kernel:mul(num.one):add(0.5):floor():div(num.one)
