@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
   printf("Choosing mode %d\n",mode_number);
   
   // Create Camera with 4 buffers
-  num_buffers = 4;
+  num_buffers = 1;
   new_CamContext = cam_iface_get_constructor_func(0);
   cc = new_CamContext(0, num_buffers, mode_number);
   _check_error();
