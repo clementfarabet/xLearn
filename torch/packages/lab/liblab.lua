@@ -2,6 +2,7 @@
 
 function lab.new(...)
    local x;
+   local arg = {...}
    if type(arg[1])=="table" then
       x=torch.Tensor(#arg,#arg[1])
       for i=1,#arg do
@@ -20,22 +21,23 @@ end
 
 
 function lab.cat(...)
-	 local dim=arg[1]:nDimension(); -- default cat to last dimension
-	 local mats=arg.n
-	 if type(arg[arg.n])=="number" then
-	    dim=arg[arg.n];
-	    mats=mats-1;
-	 end	
-	 local sz=0;
-	 for i=1,mats do
-	     sz=sz+arg[i]:size(dim)
-	 end
-	 local s=arg[1]:size(); s[dim]=sz; 
-	 local x=torch.Tensor(s)    
-	 local pos=1;
-	 for i=1,mats do
-	     x:narrow(dim,pos,arg[i]:size(dim)):copy(arg[i])
-	     pos=pos+arg[i]:size(dim)
-	 end
-	 return x;
+   local arg = {...}
+   local dim=arg[1]:nDimension(); -- default cat to last dimension
+   local mats=arg.n
+   if type(arg[arg.n])=="number" then
+      dim=arg[arg.n];
+      mats=mats-1;
+   end	
+   local sz=0;
+   for i=1,mats do
+      sz=sz+arg[i]:size(dim)
+   end
+   local s=arg[1]:size(); s[dim]=sz; 
+   local x=torch.Tensor(s)    
+   local pos=1;
+   for i=1,mats do
+      x:narrow(dim,pos,arg[i]:size(dim)):copy(arg[i])
+      pos=pos+arg[i]:size(dim)
+   end
+   return x;
 end
