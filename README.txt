@@ -2,46 +2,70 @@
 ================================================================================
 What's in this package ??
 
-Torch 5     Torch5 provides a Matlab-like environment for state-of-the-art 
-            machine learning algorithms. It is easy to use and provides a 
-            very efficient implementation, thanks to an easy and fast 
-            scripting language (Lua) and a underlying C implementation.
-            
-            The Torch 5 library is re-distributed here for simplicity of 
-            installation.
-            The original package can be found here:
-            http://torch5.sourceforge.net
+Torch 5          Torch5 provides a Matlab-like environment for state-of-the-art 
+                 machine learning algorithms. It is easy to use and provides a 
+                 very efficient implementation, thanks to an easy and fast 
+                 scripting language (Lua) and a underlying C implementation.
+                 
+                 The Torch 5 library is re-distributed here for simplicity of 
+                 installation.
+                 The original package can be found here:
+                 http://torch5.sourceforge.net
+              
+                 The distribution has been slightly modified, in particular, 
+                 the original Lua kernel has been patched for multi-threaded 
+                 applications.
+                 
+                 Torch is licensed under a BSD license:
+                 http://torch5.sourceforge.net/manual/License.html
+              
+xLearn           xLearn is an extension library for torch. It provides dozens 
+                 of tools/modules for vision, image processing, and machine 
+                 learning for vision
+              
+luaFlow          luaFlow is a unified flow-graph description environment for
+[beta]           vision / image-processing types of applications. One of its
+                 primary objectives is to abstract computing platforms, by 
+                 providing a unified, high-level description flow.
+              
+xFlow            a serializing language for luaFlow, that allows algorithms to
+[beta]           be imported/exported from/to other software frameworks
+              
+neuFlow          neuFlow is the compiler toolkit for the neuFlow processor, 
+                 developped at New York University / Yale University.
+                 The neuFlow processor is dataflow computer optimized for
+                 vision and bio-inspired models of vision. 
+                 The neuFlow compiler currently converts xLearn/torch algorithms
+                 to native neuFlow's bytecode.
+                 Soon to appear is a luaFlow>neuFlow compiler, which would   
+                 simplify retargetting.
+                 It is quite important to have access to a neuFlow device to 
+                 be able to experiment with it: for more info/support, to get
+                 a neuFlow-enabled board, please contact clement.farabet@gmail.com
+              
+thread           the Lua core is patched with LuaThread to allow
+                 multithreaded apps
+              
+LuaJIT           the entire framework can be built against LuaJIT for
+                 improved performance
+              
+opencv           a wrapper for OpenCV, for now just a couple of functions, 
+                 super easy to extend
+              
+debugger         the open-source debugger framework for Lua (activated by 
+                 requiring 'debug')
+              
+camiface         a wrapper for libcamiface, to interface webcams on MacOS
+              
+video4linux      a wrapper for libv4l2, to interface webcams in Linux
 
-            The distribution has been slightly modified, in particular, 
-            the original Lua kernel has been patched for multi-threaded 
-            applications.
-            
-            Torch is licensed under a BSD license:
-            http://torch5.sourceforge.net/manual/License.html
+mstsegm          a wrapper around P. Felzenszwalb’s image segmentation lib
 
-xLearn      xLearn is an extension library for torch. It provides dozens 
-            of tools/modules for vision, image processing, and machine 
-            learning for vision.
+powerwatersegm   a wrapper around C. Couprie’s Powerwatershed lib
 
-luaFlow     luaFlow is a unified flow-graph description environment for
-[beta]      vision / image-processing types of applications. One of its
-            primary objectives is to abstract computing platforms, by 
-            providing a unified, high-level description flow.
+stereo           a wrapper around P. Felzenszwalb’s BP-based stereo code
 
-xFlow       a serializing language for luaFlow, that allows algorithms to
-[beta]      be imported/exported from/to other software frameworks
-
-neuFlow     neuFlow is the compiler toolkit for the neuFlow processor, 
-            developped at New York University / Yale University.
-            The neuFlow processor is dataflow computer optimized for
-            vision and bio-inspired models of vision. 
-            The neuFlow compiler currently converts xLearn/torch algorithms
-            to native neuFlow's bytecode.
-            Soon to appear is a luaFlow>neuFlow compiler, which would   
-            simplify retargetting.
-            It is quite important to have access to a neuFlow device to 
-            be able to experiment with it: for more info/support, to get
-            a neuFlow-enabled board, please contact clement.farabet@gmail.com
+opticalFlow      a wrapper around C. Liu’s great optical-flow estimator
 
 
 ================================================================================
