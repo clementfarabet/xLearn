@@ -1,6 +1,6 @@
 /*
 ** Lua parser (source code -> bytecode).
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -17,6 +17,9 @@
 #include "lj_func.h"
 #include "lj_state.h"
 #include "lj_bc.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
 #include "lj_lex.h"
 #include "lj_parse.h"
 #include "lj_vm.h"
@@ -33,6 +36,7 @@ typedef enum {
   VKSTR,	/* sval = string value */
   VKNUM,	/* nval = number value */
   VKLAST = VKNUM,
+  VKCDATA,	/* nval = cdata value, not treated as a constant expression */
   /* Non-constant expressions follow: */
   VLOCAL,	/* info = local register */
   VUPVAL,	/* info = upvalue index */
@@ -61,15 +65,16 @@ typedef struct ExpDesc {
 } ExpDesc;
 
 /* Macros for expressions. */
-#define expr_hasnojump(e)	((e)->t != (e)->f)
+#define expr_hasjump(e)		((e)->t != (e)->f)
 
 #define expr_isk(e)		((e)->k <= VKLAST)
-#define expr_isk_nojump(e)	(expr_isk(e) && !expr_hasnojump(e))
+#define expr_isk_nojump(e)	(expr_isk(e) && !expr_hasjump(e))
 #define expr_isnumk(e)		((e)->k == VKNUM)
-#define expr_isnumk_nojump(e)	(expr_isnumk(e) && !expr_hasnojump(e))
+#define expr_isnumk_nojump(e)	(expr_isnumk(e) && !expr_hasjump(e))
 #define expr_isstrk(e)		((e)->k == VKSTR)
 
-#define expr_numV(e)		check_exp(expr_isnumk((e)), numV(&(e)->u.nval))
+#define expr_numtv(e)		check_exp(expr_isnumk((e)), &(e)->u.nval)
+#define expr_numberV(e)		numberVnum(expr_numtv((e)))
 
 /* Initialize expression. */
 static LJ_AINLINE void expr_init(ExpDesc *e, ExpKind k, uint32_t info)
@@ -77,6 +82,13 @@ static LJ_AINLINE void expr_init(ExpDesc *e, ExpKind k, uint32_t info)
   e->k = k;
   e->u.s.info = info;
   e->f = e->t = NO_JMP;
+}
+
+/* Check number constant for +-0. */
+static int expr_numiszero(ExpDesc *e)
+{
+  TValue *o = expr_numtv(e);
+  return tvisint(o) ? (intV(o) == 0) : tviszero(o);
 }
 
 /* Per-function linked list of scope blocks. */
@@ -170,16 +182,19 @@ LJ_NORET static void err_limit(FuncState *fs, uint32_t limit, const char *what)
 /* Return bytecode encoding for primitive constant. */
 #define const_pri(e)		check_exp((e)->k <= VKTRUE, (e)->k)
 
+#define tvhaskslot(o)	((o)->u32.hi == 0)
+#define tvkslot(o)	((o)->u32.lo)
+
 /* Add a number constant. */
 static BCReg const_num(FuncState *fs, ExpDesc *e)
 {
   lua_State *L = fs->L;
-  TValue *val;
+  TValue *o;
   lua_assert(expr_isnumk(e));
-  val = lj_tab_set(L, fs->kt, &e->u.nval);
-  if (tvisnum(val))
-    return val->u32.lo;
-  val->u64 = fs->nkn;
+  o = lj_tab_set(L, fs->kt, &e->u.nval);
+  if (tvhaskslot(o))
+    return tvkslot(o);
+  o->u64 = fs->nkn;
   return fs->nkn++;
 }
 
@@ -187,13 +202,13 @@ static BCReg const_num(FuncState *fs, ExpDesc *e)
 static BCReg const_gc(FuncState *fs, GCobj *gc, uint32_t itype)
 {
   lua_State *L = fs->L;
-  TValue o, *val;
-  setgcV(L, &o, gc, itype);
+  TValue key, *o;
+  setgcV(L, &key, gc, itype);
   /* NOBARRIER: the key is new or kept alive. */
-  val = lj_tab_set(L, fs->kt, &o);
-  if (tvisnum(val))
-    return val->u32.lo;
-  val->u64 = fs->nkgc;
+  o = lj_tab_set(L, fs->kt, &key);
+  if (tvhaskslot(o))
+    return tvkslot(o);
+  o->u64 = fs->nkgc;
   return fs->nkgc++;
 }
 
@@ -215,6 +230,17 @@ GCstr *lj_parse_keepstr(LexState *ls, const char *str, size_t len)
   lj_gc_check(L);
   return s;
 }
+
+#if LJ_HASFFI
+/* Anchor cdata to avoid GC. */
+void lj_parse_keepcdata(LexState *ls, TValue *tv, GCcdata *cd)
+{
+  /* NOBARRIER: the key is new or kept alive. */
+  lua_State *L = ls->L;
+  setcdataV(L, tv, cd);
+  setboolV(lj_tab_set(L, ls->fs->kt, tv), 1);
+}
+#endif
 
 /* -- Jump list handling -------------------------------------------------- */
 
@@ -329,7 +355,7 @@ static void bcreg_bump(FuncState *fs, BCReg n)
   if (sz > fs->framesize) {
     if (sz >= LJ_MAX_SLOTS)
       err_syntax(fs->ls, LJ_ERR_XSLOTS);
-    fs->framesize = cast_byte(sz);
+    fs->framesize = (uint8_t)sz;
   }
 }
 
@@ -463,12 +489,24 @@ static void expr_toreg_nobranch(FuncState *fs, ExpDesc *e, BCReg reg)
   if (e->k == VKSTR) {
     ins = BCINS_AD(BC_KSTR, reg, const_str(fs, e));
   } else if (e->k == VKNUM) {
-    lua_Number n = expr_numV(e);
+#if LJ_DUALNUM
+    cTValue *tv = expr_numtv(e);
+    if (tvisint(tv) && checki16(intV(tv)))
+      ins = BCINS_AD(BC_KSHORT, reg, (BCReg)(uint16_t)intV(tv));
+    else
+#else
+    lua_Number n = expr_numberV(e);
     int32_t k = lj_num2int(n);
-    if (checki16(k) && n == cast_num(k))
+    if (checki16(k) && n == (lua_Number)k)
       ins = BCINS_AD(BC_KSHORT, reg, (BCReg)(uint16_t)k);
     else
+#endif
       ins = BCINS_AD(BC_KNUM, reg, const_num(fs, e));
+#if LJ_HASFFI
+  } else if (e->k == VKCDATA) {
+    ins = BCINS_AD(BC_KCDATA, reg,
+		   const_gc(fs, obj2gco(cdataV(&e->u.nval)), LJ_TCDATA));
+#endif
   } else if (e->k == VRELOCABLE) {
     setbc_a(bcptr(fs, e), reg);
     goto noins;
@@ -500,7 +538,7 @@ static void expr_toreg(FuncState *fs, ExpDesc *e, BCReg reg)
   expr_toreg_nobranch(fs, e, reg);
   if (e->k == VJMP)
     jmp_append(fs, &e->t, e->u.s.info);  /* Add it to the true jump list. */
-  if (expr_hasnojump(e)) {  /* Discharge expression with branches. */
+  if (expr_hasjump(e)) {  /* Discharge expression with branches. */
     BCPos jend, jfalse = NO_JMP, jtrue = NO_JMP;
     if (jmp_novalue(fs, e->t) || jmp_novalue(fs, e->f)) {
       BCPos jval = (e->k == VJMP) ? NO_JMP : bcemit_jmp(fs);
@@ -533,7 +571,7 @@ static BCReg expr_toanyreg(FuncState *fs, ExpDesc *e)
 {
   expr_discharge(fs, e);
   if (e->k == VNONRELOC) {
-    if (!expr_hasnojump(e)) return e->u.s.info;  /* Already in a register. */
+    if (!expr_hasjump(e)) return e->u.s.info;  /* Already in a register. */
     if (e->u.s.info >= fs->nactvar) {
       expr_toreg(fs, e, e->u.s.info);  /* Discharge to temp. register. */
       return e->u.s.info;
@@ -546,7 +584,7 @@ static BCReg expr_toanyreg(FuncState *fs, ExpDesc *e)
 /* Partially discharge expression to a value. */
 static void expr_toval(FuncState *fs, ExpDesc *e)
 {
-  if (expr_hasnojump(e))
+  if (expr_hasjump(e))
     expr_toanyreg(fs, e);
   else
     expr_discharge(fs, e);
@@ -671,8 +709,6 @@ static void bcemit_branch_t(FuncState *fs, ExpDesc *e)
     pc = NO_JMP;  /* Never jump. */
   else if (e->k == VJMP)
     invertcond(fs, e), pc = e->u.s.info;
-  else if (e->k == VKFALSE && !expr_hasnojump(e))
-    pc = bcemit_jmp(fs);  /* Always jump. */
   else
     pc = bcemit_branch(fs, e, 0);
   jmp_append(fs, &e->f, pc);
@@ -689,8 +725,6 @@ static void bcemit_branch_f(FuncState *fs, ExpDesc *e)
     pc = NO_JMP;  /* Never jump. */
   else if (e->k == VJMP)
     pc = e->u.s.info;
-  else if (e->k == VKTRUE && !expr_hasnojump(e))
-    pc = bcemit_jmp(fs);  /* Always jump. */
   else
     pc = bcemit_branch(fs, e, 1);
   jmp_append(fs, &e->t, pc);
@@ -704,10 +738,19 @@ static void bcemit_branch_f(FuncState *fs, ExpDesc *e)
 static int foldarith(BinOpr opr, ExpDesc *e1, ExpDesc *e2)
 {
   TValue o;
+  lua_Number n;
   if (!expr_isnumk_nojump(e1) || !expr_isnumk_nojump(e2)) return 0;
-  setnumV(&o, lj_vm_foldarith(expr_numV(e1), expr_numV(e2), (int)opr-OPR_ADD));
+  n = lj_vm_foldarith(expr_numberV(e1), expr_numberV(e2), (int)opr-OPR_ADD);
+  setnumV(&o, n);
   if (tvisnan(&o) || tvismzero(&o)) return 0;  /* Avoid NaN and -0 as consts. */
-  setnumV(&e1->u.nval, numV(&o));
+  if (LJ_DUALNUM) {
+    int32_t k = lj_num2int(n);
+    if ((lua_Number)k == n) {
+      setintV(&e1->u.nval, k);
+      return 1;
+    }
+  }
+  setnumV(&e1->u.nval, n);
   return 1;
 }
 
@@ -856,7 +899,7 @@ static void bcemit_unop(FuncState *fs, BCOp op, ExpDesc *e)
     if (e->k == VKNIL || e->k == VKFALSE) {
       e->k = VKTRUE;
       return;
-    } else if (expr_isk(e)) {
+    } else if (expr_isk(e) || (LJ_HASFFI && e->k == VKCDATA)) {
       e->k = VKFALSE;
       return;
     } else if (e->k == VJMP) {
@@ -872,10 +915,31 @@ static void bcemit_unop(FuncState *fs, BCOp op, ExpDesc *e)
     }
   } else {
     lua_assert(op == BC_UNM || op == BC_LEN);
-    /* Constant-fold negations. But avoid folding to -0. */
-    if (op == BC_UNM && expr_isnumk_nojump(e) && expr_numV(e) != 0) {
-      setnumV(&e->u.nval, -expr_numV(e));
-      return;
+    if (op == BC_UNM && !expr_hasjump(e)) {  /* Constant-fold negations. */
+#if LJ_HASFFI
+      if (e->k == VKCDATA) {  /* Fold in-place since cdata is not interned. */
+	GCcdata *cd = cdataV(&e->u.nval);
+	int64_t *p = (int64_t *)cdataptr(cd);
+	if (cd->typeid == CTID_COMPLEX_DOUBLE)
+	  p[1] ^= (int64_t)U64x(80000000,00000000);
+	else
+	  *p = -*p;
+	return;
+      } else
+#endif
+      if (expr_isnumk(e) && !expr_numiszero(e)) {  /* Avoid folding to -0. */
+	TValue *o = expr_numtv(e);
+	if (tvisint(o)) {
+	  int32_t k = intV(o);
+	  if (k == -k)
+	    setnumV(o, -(lua_Number)k);
+	  else
+	    setintV(o, -k);
+	} else {
+	  o->u64 ^= U64x(80000000,00000000);
+	  return;
+	}
+      }
     }
     expr_toanyreg(fs, e);
   }
@@ -958,7 +1022,7 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
 static void var_add(LexState *ls, BCReg nvars)
 {
   FuncState *fs = ls->fs;
-  fs->nactvar = cast_byte(fs->nactvar + nvars);
+  fs->nactvar = (uint8_t)(fs->nactvar + nvars);
   for (; nvars; nvars--)
     var_get(ls, fs, fs->nactvar - nvars).startpc = fs->pc;
 }
@@ -1066,16 +1130,33 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
   kt = fs->kt;
   array = tvref(kt->array);
   for (i = 0; i < kt->asize; i++)
-    if (tvisnum(&array[i]))
-      ((lua_Number *)kptr)[array[i].u32.lo] = cast_num(i);
+    if (tvhaskslot(&array[i])) {
+      TValue *tv = &((TValue *)kptr)[tvkslot(&array[i])];
+      if (LJ_DUALNUM)
+	setintV(tv, (int32_t)i);
+      else
+	setnumV(tv, (lua_Number)i);
+    }
   node = noderef(kt->node);
   hmask = kt->hmask;
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
-    if (tvisnum(&n->val)) {
-      ptrdiff_t kidx = (ptrdiff_t)n->val.u32.lo;
+    if (tvhaskslot(&n->val)) {
+      ptrdiff_t kidx = (ptrdiff_t)tvkslot(&n->val);
+      lua_assert(!tvisint(&n->key));
       if (tvisnum(&n->key)) {
-	((lua_Number *)kptr)[kidx] = numV(&n->key);
+	TValue *tv = &((TValue *)kptr)[kidx];
+	if (LJ_DUALNUM) {
+	  lua_Number nn = numV(&n->key);
+	  int32_t k = lj_num2int(nn);
+	  lua_assert(!tvismzero(&n->key));
+	  if ((lua_Number)k == nn)
+	    setintV(tv, k);
+	  else
+	    *tv = n->key;
+	} else {
+	  *tv = n->key;
+	}
       } else {
 	GCobj *o = gcV(&n->key);
 	setgcref(((GCRef *)kptr)[~kidx], o);
@@ -1258,12 +1339,22 @@ static void expr_index(FuncState *fs, ExpDesc *t, ExpDesc *e)
   /* Already called: expr_toval(fs, e). */
   t->k = VINDEXED;
   if (expr_isnumk(e)) {
-    lua_Number n = expr_numV(e);
+#if LJ_DUALNUM
+    if (tvisint(expr_numtv(e))) {
+      int32_t k = intV(expr_numtv(e));
+      if (checku8(k)) {
+	t->u.s.aux = BCMAX_C+1+(uint32_t)k;  /* 256..511: const byte key */
+	return;
+      }
+    }
+#else
+    lua_Number n = expr_numberV(e);
     int32_t k = lj_num2int(n);
-    if (checku8(k) && n == cast_num(k)) {
+    if (checku8(k) && n == (lua_Number)k) {
       t->u.s.aux = BCMAX_C+1+(uint32_t)k;  /* 256..511: const byte key */
       return;
     }
+#endif
   } else if (expr_isstrk(e)) {
     BCReg idx = const_str(fs, e);
     if (idx <= BCMAX_C) {
@@ -1303,8 +1394,8 @@ static void expr_kvalue(TValue *v, ExpDesc *e)
     setgcref(v->gcr, obj2gco(e->u.sval));
     setitype(v, LJ_TSTR);
   } else {
-    lua_assert(e->k == VKNUM);
-    setnumV(v, expr_numV(e));
+    lua_assert(tvisnumber(expr_numtv(e)));
+    *v = *expr_numtv(e);
   }
 }
 
@@ -1329,7 +1420,7 @@ static void expr_table(LexState *ls, ExpDesc *e)
     if (ls->token == '[') {
       expr_bracket(ls, &key);  /* Already calls expr_toval. */
       if (!expr_isk(&key)) expr_index(fs, e, &key);
-      if (expr_isnumk(&key) && expr_numV(&key) == 0) needarr = 1; else nhash++;
+      if (expr_isnumk(&key) && expr_numiszero(&key)) needarr = 1; else nhash++;
       lex_check(ls, '=');
     } else if (ls->token == TK_name && lj_lex_lookahead(ls) == '=') {
       expr_str(ls, &key);
@@ -1554,8 +1645,8 @@ static void expr_simple(LexState *ls, ExpDesc *v)
 {
   switch (ls->token) {
   case TK_number:
-    expr_init(v, VKNUM, 0);
-    setnumV(&v->u.nval, numV(&ls->tokenval));
+    expr_init(v, (LJ_HASFFI && tviscdata(&ls->tokenval)) ? VKCDATA : VKNUM, 0);
+    copyTV(ls->L, &v->u.nval, &ls->tokenval);
     break;
   case TK_string:
     expr_init(v, VKSTR, 0);
@@ -1752,14 +1843,18 @@ static void parse_break(LexState *ls)
 {
   FuncState *fs = ls->fs;
   FuncScope *bl;
+  BCReg savefr;
   int upval = 0;
   for (bl = fs->bl; bl && !bl->isbreakable; bl = bl->prev)
     upval |= bl->upval;  /* Collect upvalues in intervening scopes. */
   if (!bl)  /* Error if no breakable scope found. */
     err_syntax(ls, LJ_ERR_XBREAK);
+  savefr = fs->freereg;
+  fs->freereg = bl->nactvar;  /* Shrink slots to help data-flow analysis. */
   if (upval)
     bcemit_AJ(fs, BC_UCLO, bl->nactvar, 0);  /* Close upvalues. */
   jmp_append(fs, &bl->breaklist, bcemit_jmp(fs));
+  fs->freereg = savefr;
 }
 
 /* Check for end of block. */
@@ -2087,10 +2182,10 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
   case BC_GGET:
     /* There's no inverse index (yet), so lookup the strings. */
     o = lj_tab_getstr(fs->kt, lj_str_newlit(ls->L, "pairs"));
-    if (o && tvisnum(o) && o->u32.lo == bc_d(ins))
+    if (o && tvhaskslot(o) && tvkslot(o) == bc_d(ins))
       return 1;
     o = lj_tab_getstr(fs->kt, lj_str_newlit(ls->L, "next"));
-    if (o && tvisnum(o) && o->u32.lo == bc_d(ins))
+    if (o && tvhaskslot(o) && tvkslot(o) == bc_d(ins))
       return 1;
     return 0;
   default:

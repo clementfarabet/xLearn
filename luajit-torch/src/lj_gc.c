@@ -1,6 +1,6 @@
 /*
 ** Garbage collector.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -19,6 +19,9 @@
 #include "lj_meta.h"
 #include "lj_state.h"
 #include "lj_frame.h"
+#if LJ_HASFFI
+#include "lj_cdata.h"
+#endif
 #include "lj_trace.h"
 #include "lj_vm.h"
 
@@ -65,7 +68,7 @@ static void gc_mark(global_State *g, GCobj *o)
     gc_marktv(g, uvval(uv));
     if (uv->closed)
       gray2black(o);  /* Closed upvalues are never gray. */
-  } else if (o->gch.gct != ~LJ_TSTR) {
+  } else if (o->gch.gct != ~LJ_TSTR && o->gch.gct != ~LJ_TCDATA) {
     lua_assert(o->gch.gct == ~LJ_TFUNC || o->gch.gct == ~LJ_TTAB ||
 	       o->gch.gct == ~LJ_TTHREAD || o->gch.gct == ~LJ_TPROTO);
     setgcrefr(o->gch.gclist, g->gc.gray);
@@ -370,6 +373,11 @@ static const GCFreeFunc gc_freefunc[] = {
   (GCFreeFunc)lj_func_free,
 #if LJ_HASJIT
   (GCFreeFunc)lj_trace_free,
+#else
+  (GCFreeFunc)0,
+#endif
+#if LJ_HASFFI
+  (GCFreeFunc)lj_cdata_free,
 #else
   (GCFreeFunc)0,
 #endif
@@ -769,7 +777,7 @@ void *lj_mem_realloc(lua_State *L, void *p, MSize osz, MSize nsz)
 }
 
 /* Allocate new GC object and link it to the root set. */
-void *lj_mem_newgco(lua_State *L, MSize size)
+void * LJ_FASTCALL lj_mem_newgco(lua_State *L, MSize size)
 {
   global_State *g = G(L);
   GCobj *o = (GCobj *)g->allocf(g->allocd, NULL, 0, size);

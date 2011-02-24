@@ -1,6 +1,6 @@
 /*
 ** Stack frames.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #ifndef _LJ_FRAME_H
@@ -69,7 +69,7 @@ enum {
 #define CFRAME_SIZE_JIT		CFRAME_SIZE
 #define CFRAME_SHIFT_MULTRES	0
 #elif LJ_TARGET_X64
-#if _WIN64
+#if LJ_ABI_WIN
 #define CFRAME_OFS_PREV		(13*8)
 #define CFRAME_OFS_PC		(25*4)
 #define CFRAME_OFS_L		(24*4)
@@ -90,6 +90,17 @@ enum {
 #define CFRAME_SIZE_JIT		(CFRAME_SIZE + 16)
 #define CFRAME_SHIFT_MULTRES	0
 #endif
+#elif LJ_TARGET_ARM
+/* NYI: Dummy definitions for now. */
+#define CFRAME_OFS_ERRF		28
+#define CFRAME_OFS_NRES		24
+#define CFRAME_OFS_PREV		20
+#define CFRAME_OFS_L		16
+#define CFRAME_OFS_PC		12
+#define CFRAME_OFS_MULTRES	8
+#define CFRAME_SIZE		64
+#define CFRAME_SIZE_JIT		CFRAME_SIZE
+#define CFRAME_SHIFT_MULTRES	3
 #elif LJ_TARGET_PPCSPE
 #define CFRAME_OFS_ERRF		28
 #define CFRAME_OFS_NRES		24

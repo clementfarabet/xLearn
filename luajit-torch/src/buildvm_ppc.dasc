@@ -1,6 +1,6 @@
 |// Low-level VM code for PowerPC CPUs.
 |// Bytecode interpreter, fast functions and helper functions.
-|// Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+|// Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 |
 |.arch ppc
 |.section code_op, code_sub
@@ -1098,8 +1098,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  checktab TAB:CARG1
   |   lwz PC, FRAME_PC(BASE)
   |  checkfail ->fff_fallback
+#ifdef LUAJIT_ENABLE_LUA52COMPAT
+  |   lwz TAB:TMP2, TAB:CARG1->metatable
+  |  evldd CFUNC:TMP0, CFUNC:RB->upvalue[0]
+  |   cmplwi TAB:TMP2, 0
+  |  la RA, -8(BASE)
+  |   bne ->fff_fallback
+#else
   |  evldd CFUNC:TMP0, CFUNC:RB->upvalue[0]
   |  la RA, -8(BASE)
+#endif
   |   evstdd TAB:CARG1, 0(BASE)
   |   evstdd TISNIL, 8(BASE)
   |  li RD, (3+1)*8
@@ -1122,13 +1130,13 @@ static void build_subroutines(BuildCtx *ctx)
   |   la RA, -8(BASE)
   |  cmplw TMP0, TMP2
   |   slwi TMP3, TMP2, 3
+  |  evstdd CARG2, 0(RA)
   |  ble >2				// Not in array part?
   |  evlddx TMP1, TMP1, TMP3
   |1:
   |  checknil TMP1
   |   li RD, (0+1)*8
   |  checkok ->fff_res			// End of iteration, return 0 results.
-  |  evstdd CARG2, 0(RA)
   |   li RD, (2+1)*8
   |  evstdd TMP1, 8(RA)
   |  b ->fff_res
@@ -1150,8 +1158,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  checktab TAB:CARG1
   |   lwz PC, FRAME_PC(BASE)
   |  checkfail ->fff_fallback
+#ifdef LUAJIT_ENABLE_LUA52COMPAT
+  |   lwz TAB:TMP2, TAB:CARG1->metatable
+  |  evldd CFUNC:TMP0, CFUNC:RB->upvalue[0]
+  |   cmplwi TAB:TMP2, 0
+  |  la RA, -8(BASE)
+  |   bne ->fff_fallback
+#else
   |  evldd CFUNC:TMP0, CFUNC:RB->upvalue[0]
   |  la RA, -8(BASE)
+#endif
   |    evsplati TMP1, 0
   |   evstdd TAB:CARG1, 0(BASE)
   |    evstdd TMP1, 8(BASE)
@@ -1681,8 +1697,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  b <1
   |.endmacro
   |
-  |ffstring_case string_lower, 0x41
-  |ffstring_case string_upper, 0x61
+  |ffstring_case string_lower, 65
+  |ffstring_case string_upper, 97
   |
   |//-- Table library ------------------------------------------------------
   |
@@ -2058,6 +2074,15 @@ static void build_subroutines(BuildCtx *ctx)
   |//-----------------------------------------------------------------------
   |
   |//-----------------------------------------------------------------------
+  |//-- FFI helper functions -----------------------------------------------
+  |//-----------------------------------------------------------------------
+  |
+  |->vm_ffi_call:
+#if LJ_HASFFI
+  |  NYI
+#endif
+  |
+  |//-----------------------------------------------------------------------
 }
 
 /* Generate the code for a single instruction. */
@@ -2413,6 +2438,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  evmergelo TMP0, TISSTR, TMP0
     |  evstddx TMP0, BASE, RA
     |  ins_next2
+    break;
+  case BC_KCDATA:
+#if LJ_HASFFI
+    |  // RA = dst*8, RD = cdata_const*8 (~)
+    |  ins_next1
+    |  srwi TMP1, RD, 1
+    |  subfic TMP1, TMP1, -4
+    |  lwzx TMP0, KBASE, TMP1		// KBASE-4-cdata_const*4
+    |  li TMP2, LJ_TCDATA
+    |  evmergelo TMP0, TMP2, TMP0
+    |  evstddx TMP0, BASE, RA
+    |  ins_next2
+#endif
     break;
   case BC_KSHORT:
     |  // RA = dst*8, RD = int16_literal*8
@@ -3053,7 +3091,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
 
   case BC_ITERN:
-    |  // RA = base*8, (RB = (nresults+1)*8 (2+1)*8, RC = (nargs+1)*8 (2+1)*8)
+    |  // RA = base*8, (RB = (nresults+1)*8, RC = (nargs+1)*8 (2+1)*8)
 #if LJ_HASJIT
     |  // NYI: add hotloop, record BC_ITERN.
 #endif

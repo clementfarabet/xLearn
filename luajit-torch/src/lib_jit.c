@@ -1,6 +1,6 @@
 /*
 ** JIT library.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lib_jit_c
@@ -52,7 +52,7 @@ static int setjitmode(lua_State *L, int mode)
     if ((mode & LUAJIT_MODE_MASK) == LUAJIT_MODE_ENGINE)
       lj_err_caller(L, LJ_ERR_NOJIT);
   err:
-    lj_err_arg(L, 1, LJ_ERR_NOLFUNC);
+    lj_err_argt(L, 1, LUA_TFUNCTION);
   }
   return 0;
 }
@@ -70,7 +70,7 @@ LJLIB_CF(jit_off)
 LJLIB_CF(jit_flush)
 {
 #if LJ_HASJIT
-  if (L->base < L->top && (tvisnum(L->base) || tvisstr(L->base))) {
+  if (L->base < L->top && !tvisnil(L->base)) {
     int traceno = lj_lib_checkint(L, 1);
     luaJIT_setmode(L, traceno, LUAJIT_MODE_FLUSH|LUAJIT_MODE_TRACE);
     return 0;
@@ -133,6 +133,7 @@ LJLIB_CF(jit_attach)
   return 0;
 }
 
+LJLIB_PUSH(top-5) LJLIB_SET(os)
 LJLIB_PUSH(top-4) LJLIB_SET(arch)
 LJLIB_PUSH(top-3) LJLIB_SET(version_num)
 LJLIB_PUSH(top-2) LJLIB_SET(version)
@@ -201,8 +202,8 @@ LJLIB_CF(jit_util_funcinfo)
     t = tabV(L->top-1);
     if (!iscfunc(fn))
       setintfield(L, t, "ffid", fn->c.ffid);
-    setnumV(lj_tab_setstr(L, t, lj_str_newlit(L, "addr")),
-	    cast_num((intptr_t)fn->c.f));
+    setintptrV(lj_tab_setstr(L, t, lj_str_newlit(L, "addr")),
+	       (intptr_t)(void *)fn->c.f);
     setintfield(L, t, "upvalues", fn->c.nupvalues);
   }
   return 1;
@@ -232,7 +233,7 @@ LJLIB_CF(jit_util_funck)
   ptrdiff_t idx = (ptrdiff_t)lj_lib_checkint(L, 2);
   if (idx >= 0) {
     if (idx < (ptrdiff_t)pt->sizekn) {
-      setnumV(L->top-1, proto_knum(pt, idx));
+      copyTV(L, L->top-1, proto_knumtv(pt, idx));
       return 1;
     }
   } else {
@@ -357,7 +358,7 @@ LJLIB_CF(jit_util_tracemc)
   GCtrace *T = jit_checktrace(L);
   if (T && T->mcode != NULL) {
     setstrV(L, L->top-1, lj_str_new(L, (const char *)T->mcode, T->szmcode));
-    setnumV(L->top++, cast_num((intptr_t)T->mcode));
+    setintptrV(L->top++, (intptr_t)(void *)T->mcode);
     setintV(L->top++, T->mcloop);
     return 3;
   }
@@ -370,7 +371,7 @@ LJLIB_CF(jit_util_traceexitstub)
   ExitNo exitno = (ExitNo)lj_lib_checkint(L, 1);
   jit_State *J = L2J(L);
   if (exitno < EXITSTUBS_PER_GROUP*LJ_MAX_EXITSTUBGR) {
-    setnumV(L->top-1, cast_num((uintptr_t)exitstub_addr(J, exitno)));
+    setintptrV(L->top-1, (intptr_t)(void *)exitstub_addr(J, exitno));
     return 1;
   }
   return 0;
@@ -381,7 +382,7 @@ LJLIB_CF(jit_util_ircalladdr)
 {
   uint32_t idx = (uint32_t)lj_lib_checkint(L, 1);
   if (idx < IRCALL__MAX) {
-    setnumV(L->top-1, cast_num((uintptr_t)(void *)lj_ir_callinfo[idx].func));
+    setintptrV(L->top-1, (intptr_t)(void *)lj_ir_callinfo[idx].func);
     return 1;
   }
   return 0;
@@ -461,11 +462,14 @@ static int jitopt_param(jit_State *J, const char *str)
   int i;
   for (i = 0; i < JIT_P__MAX; i++) {
     size_t len = *(const uint8_t *)lst;
-    TValue tv;
     lua_assert(len != 0);
-    if (strncmp(str, lst+1, len) == 0 && str[len] == '=' &&
-	lj_str_numconv(&str[len+1], &tv)) {
-      J->param[i] = lj_num2int(tv.n);
+    if (strncmp(str, lst+1, len) == 0 && str[len] == '=') {
+      int32_t n = 0;
+      const char *p = &str[len+1];
+      while (*p >= '0' && *p <= '9')
+	n = n*10 + (*p++ - '0');
+      if (*p) return 0;  /* Malformed number. */
+      J->param[i] = n;
       if (i == JIT_P_hotloop)
 	lj_dispatch_init_hotcount(J2G(J));
       return 1;  /* Ok. */
@@ -529,6 +533,7 @@ static uint32_t jit_cpudetect(lua_State *L)
     flags |= ((features[3] >> 15)&1) * JIT_F_CMOV;
     flags |= ((features[3] >> 26)&1) * JIT_F_SSE2;
 #if LJ_HASJIT
+    flags |= ((features[2] >> 0)&1) * JIT_F_SSE3;
     flags |= ((features[2] >> 19)&1) * JIT_F_SSE4_1;
     if (vendor[2] == 0x6c65746e) {  /* Intel. */
       if ((features[0] & 0x0ff00f00) == 0x00000f00)  /* P4. */
@@ -555,6 +560,8 @@ static uint32_t jit_cpudetect(lua_State *L)
     luaL_error(L, "CPU does not support SSE2 (recompile without -DLUAJIT_CPU_SSE2)");
 #endif
 #endif
+#elif LJ_TARGET_ARM
+  /* NYI */
 #elif LJ_TARGET_PPC
   /* Nothing to do. */
 #else
@@ -584,14 +591,15 @@ static void jit_init(lua_State *L)
 
 LUALIB_API int luaopen_jit(lua_State *L)
 {
+  lua_pushliteral(L, LJ_OS_NAME);
   lua_pushliteral(L, LJ_ARCH_NAME);
   lua_pushinteger(L, LUAJIT_VERSION_NUM);
   lua_pushliteral(L, LUAJIT_VERSION);
-  LJ_LIB_REG(L, jit);
+  LJ_LIB_REG(L, LUA_JITLIBNAME, jit);
 #ifndef LUAJIT_DISABLE_JITUTIL
-  LJ_LIB_REG_(L, "jit.util", jit_util);
+  LJ_LIB_REG(L, "jit.util", jit_util);
 #endif
-  LJ_LIB_REG_(L, "jit.opt", jit_opt);
+  LJ_LIB_REG(L, "jit.opt", jit_opt);
   L->top -= 2;
   jit_init(L);
   return 1;

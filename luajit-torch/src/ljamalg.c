@@ -1,6 +1,6 @@
 /*
 ** LuaJIT core and libraries amalgamation.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 */
 
 /*
@@ -19,6 +19,10 @@
 /* To get the mremap prototype. Must be defind before any system includes. */
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
+#endif
+
+#ifndef WINVER
+#define WINVER 0x0500
 #endif
 
 #include "lua.h"
@@ -40,6 +44,13 @@
 #include "lj_api.c"
 #include "lj_lex.c"
 #include "lj_parse.c"
+#include "lj_ctype.c"
+#include "lj_cdata.c"
+#include "lj_cconv.c"
+#include "lj_ccall.c"
+#include "lj_carith.c"
+#include "lj_clib.c"
+#include "lj_cparse.c"
 #include "lj_lib.c"
 #include "lj_ir.c"
 #include "lj_opt_mem.c"
@@ -47,9 +58,12 @@
 #include "lj_opt_narrow.c"
 #include "lj_opt_dce.c"
 #include "lj_opt_loop.c"
+#include "lj_opt_split.c"
 #include "lj_mcode.c"
 #include "lj_snap.c"
 #include "lj_record.c"
+#include "lj_crecord.c"
+#include "lj_ffrecord.c"
 #include "lj_asm.c"
 #include "lj_trace.c"
 #include "lj_gdbjit.c"
@@ -66,5 +80,6 @@
 #include "lib_debug.c"
 #include "lib_bit.c"
 #include "lib_jit.c"
+#include "lib_ffi.c"
 #include "lib_init.c"
 

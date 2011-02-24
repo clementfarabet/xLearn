@@ -1,6 +1,6 @@
 /*
 ** Metamethod handling.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -44,7 +44,7 @@ cTValue *lj_meta_cache(GCtab *mt, MMS mm, GCstr *name)
   cTValue *mo = lj_tab_getstr(mt, name);
   lua_assert(mm <= MM_FAST);
   if (!mo || tvisnil(mo)) {  /* No metamethod? */
-    mt->nomm |= cast_byte(1u<<mm);  /* Set negative cache flag. */
+    mt->nomm |= (uint8_t)(1u<<mm);  /* Set negative cache flag. */
     return NULL;
   }
   return mo;
@@ -156,6 +156,8 @@ static cTValue *str2num(cTValue *o, TValue *n)
 {
   if (tvisnum(o))
     return o;
+  else if (tvisint(o))
+    return (setnumV(n, (lua_Number)intV(o)), n);
   else if (tvisstr(o) && lj_str_tonum(strV(o), n))
     return n;
   else
@@ -192,8 +194,8 @@ static LJ_AINLINE int tostring(lua_State *L, TValue *o)
 {
   if (tvisstr(o)) {
     return 1;
-  } else if (tvisnum(o)) {
-    setstrV(L, o, lj_str_fromnum(L, &o->n));
+  } else if (tvisnumber(o)) {
+    setstrV(L, o, lj_str_fromnumber(L, o));
     return 1;
   } else {
     return 0;
@@ -205,12 +207,12 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 {
   do {
     int n = 1;
-    if (!(tvisstr(top-1) || tvisnum(top-1)) || !tostring(L, top)) {
+    if (!(tvisstr(top-1) || tvisnumber(top-1)) || !tostring(L, top)) {
       cTValue *mo = lj_meta_lookup(L, top-1, MM_concat);
       if (tvisnil(mo)) {
 	mo = lj_meta_lookup(L, top, MM_concat);
 	if (tvisnil(mo)) {
-	  if (tvisstr(top-1) || tvisnum(top-1)) top++;
+	  if (tvisstr(top-1) || tvisnumber(top-1)) top++;
 	  lj_err_optype(L, top-1, LJ_ERR_OPCAT);
 	  return NULL;  /* unreachable */
 	}
@@ -302,10 +304,45 @@ TValue *lj_meta_equal(lua_State *L, GCobj *o1, GCobj *o2, int ne)
   return cast(TValue *, (intptr_t)ne);
 }
 
+#if LJ_HASFFI
+TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
+{
+  ASMFunction cont = (bc_op(ins) & 1) ? lj_cont_condf : lj_cont_condt;
+  int op = (int)bc_op(ins) & ~1;
+  TValue tv;
+  cTValue *mo, *o2, *o1 = &L->base[bc_a(ins)];
+  cTValue *o1mm = o1;
+  if (op == BC_ISEQV) {
+    o2 = &L->base[bc_d(ins)];
+    if (!tviscdata(o1mm)) o1mm = o2;
+  } else if (op == BC_ISEQS) {
+    setstrV(L, &tv, gco2str(proto_kgc(curr_proto(L), ~(ptrdiff_t)bc_d(ins))));
+    o2 = &tv;
+  } else if (op == BC_ISEQN) {
+    o2 = &mref(curr_proto(L)->k, cTValue)[bc_d(ins)];
+  } else {
+    lua_assert(op == BC_ISEQP);
+    setitype(&tv, ~bc_d(ins));
+    o2 = &tv;
+  }
+  mo = lj_meta_lookup(L, o1mm, MM_eq);
+  if (LJ_LIKELY(!tvisnil(mo)))
+    return mmcall(L, cont, mo, o1, o2);
+  else
+    return cast(TValue *, (intptr_t)(bc_op(ins) & 1));
+}
+#endif
+
 /* Helper for ordered comparisons. String compare, __lt/__le metamethods. */
 TValue *lj_meta_comp(lua_State *L, cTValue *o1, cTValue *o2, int op)
 {
-  if (itype(o1) == itype(o2)) {  /* Never called with two numbers. */
+  if (LJ_HASFFI && (tviscdata(o1) || tviscdata(o2))) {
+    ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
+    MMS mm = (op & 2) ? MM_le : MM_lt;
+    cTValue *mo = lj_meta_lookup(L, tviscdata(o1) ? o1 : o2, mm);
+    if (LJ_UNLIKELY(tvisnil(mo))) goto err;
+    return mmcall(L, cont, mo, o1, o2);
+  } else if (itype(o1) == itype(o2)) {  /* Never called with two numbers. */
     if (tvisstr(o1) && tvisstr(o2)) {
       int32_t res = lj_str_cmp(strV(o1), strV(o2));
       return cast(TValue *, (intptr_t)(((op&2) ? res <= 0 : res < 0) ^ (op&1)));

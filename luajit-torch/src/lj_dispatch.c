@@ -1,6 +1,6 @@
 /*
 ** Instruction dispatch handling.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #define lj_dispatch_c
@@ -320,7 +320,7 @@ static void callhook(lua_State *L, int event, BCLine line)
     ar.event = event;
     ar.currentline = line;
     /* Top frame, nextframe = NULL. */
-    ar.i_ci = cast_int((L->base-1) - tvref(L->stack));
+    ar.i_ci = (int)((L->base-1) - tvref(L->stack));
     lj_state_checkstack(L, 1+LUA_MINSTACK);
     hook_enter(g);
     hookf(L, &ar);
@@ -388,9 +388,12 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 static int call_init(lua_State *L, GCfunc *fn)
 {
   if (isluafunc(fn)) {
-    int numparams = funcproto(fn)->numparams;
+    GCproto *pt = funcproto(fn);
+    int numparams = pt->numparams;
     int gotparams = (int)(L->top - L->base);
-    lj_state_checkstack(L, (MSize)numparams);
+    int need = pt->framesize;
+    if ((pt->flags & PROTO_IS_VARARG)) need += 1+gotparams;
+    lj_state_checkstack(L, (MSize)need);
     numparams -= gotparams;
     return numparams >= 0 ? numparams : 0;
   } else {

@@ -1,6 +1,6 @@
 /*
 ** LuaJIT common internal definitions.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #ifndef _LJ_DEF_H
@@ -62,7 +62,7 @@ typedef unsigned __int32 uintptr_t;
 #define LJ_MIN_SBUF	32		/* Min. string buffer length. */
 #define LJ_MIN_VECSZ	8		/* Min. size for growable vectors. */
 #define LJ_MIN_IRSZ	32		/* Min. size for growable IR. */
-#define LJ_MIN_KNUMSZ	16		/* Min. size for chained KNUM array. */
+#define LJ_MIN_K64SZ	16		/* Min. size for chained K64Array. */
 
 /* JIT compiler limits. */
 #define LJ_MAX_JSLOTS	250		/* Max. # of stack slots for a trace. */
@@ -81,7 +81,6 @@ typedef unsigned __int32 uintptr_t;
 #define U64x(hi, lo)	(((uint64_t)0x##hi << 32) + (uint64_t)0x##lo)
 #define cast_byte(i)	cast(uint8_t, (i))
 #define cast_num(i)	cast(lua_Number, (i))
-#define cast_int(i)	cast(int, (i))
 #define i32ptr(p)	((int32_t)(intptr_t)(void *)(p))
 #define u32ptr(p)	((uint32_t)(intptr_t)(void *)(p))
 
@@ -89,11 +88,13 @@ typedef unsigned __int32 uintptr_t;
 #define checku8(x)	((x) == (int32_t)(uint8_t)(x))
 #define checki16(x)	((x) == (int32_t)(int16_t)(x))
 #define checku16(x)	((x) == (int32_t)(uint16_t)(x))
+#define checki32(x)	((x) == (int32_t)(x))
+#define checku32(x)	((x) == (uint32_t)(x))
 #define checkptr32(x)	((uintptr_t)(x) == (uint32_t)(uintptr_t)(x))
 
 /* Every half-decent C compiler transforms this into a rotate instruction. */
-#define lj_rol(x, n)	(((x)<<(n)) | ((x)>>(32-(n))))
-#define lj_ror(x, n)	(((x)<<(32-(n))) | ((x)>>(n)))
+#define lj_rol(x, n)	(((x)<<(n)) | ((x)>>(8*sizeof(x)-(n))))
+#define lj_ror(x, n)	(((x)<<(8*sizeof(x)-(n))) | ((x)>>(n)))
 
 /* A really naive Bloom filter. But sufficient for our needs. */
 typedef uintptr_t BloomFilter;
@@ -141,11 +142,28 @@ static LJ_AINLINE uint32_t lj_bswap(uint32_t x)
 {
   return (uint32_t)__builtin_bswap32((int32_t)x);
 }
+
+static LJ_AINLINE uint64_t lj_bswap64(uint64_t x)
+{
+  return (uint64_t)__builtin_bswap64((int64_t)x);
+}
 #elif defined(__i386__) || defined(__x86_64__)
 static LJ_AINLINE uint32_t lj_bswap(uint32_t x)
 {
   uint32_t r; __asm__("bswap %0" : "=r" (r) : "0" (x)); return r;
 }
+
+#if defined(__i386__)
+static LJ_AINLINE uint64_t lj_bswap64(uint64_t x)
+{
+  return ((uint64_t)lj_bswap((uint32_t)x)<<32) | lj_bswap((uint32_t)(x>>32));
+}
+#else
+static LJ_AINLINE uint64_t lj_bswap64(uint64_t x)
+{
+  uint64_t r; __asm__("bswap %0" : "=r" (r) : "0" (x)); return r;
+}
+#endif
 #else
 #error "missing define for lj_bswap()"
 #endif
@@ -172,6 +190,7 @@ static LJ_AINLINE uint32_t lj_fls(uint32_t x)
 }
 
 #define lj_bswap(x)	(_byteswap_ulong((x)))
+#define lj_bswap64(x)	(_byteswap_uint64((x)))
 
 #else
 #error "missing defines for your compiler"
@@ -219,7 +238,12 @@ static LJ_AINLINE uint32_t lj_fls(uint32_t x)
 /* Static assertions. */
 #define LJ_ASSERT_NAME2(name, line)	name ## line
 #define LJ_ASSERT_NAME(line)		LJ_ASSERT_NAME2(lj_assert_, line)
+#ifdef __COUNTER__
+#define LJ_STATIC_ASSERT(cond) \
+  extern void LJ_ASSERT_NAME(__COUNTER__)(int STATIC_ASSERTION_FAILED[(cond)?1:-1])
+#else
 #define LJ_STATIC_ASSERT(cond) \
   extern void LJ_ASSERT_NAME(__LINE__)(int STATIC_ASSERTION_FAILED[(cond)?1:-1])
+#endif
 
 #endif

@@ -1,6 +1,6 @@
 /*
 ** String library.
-** Copyright (C) 2005-2010 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2011 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -61,7 +61,7 @@ LJLIB_ASM(string_byte)		LJLIB_REC(string_range 0)
 
 LJLIB_ASM(string_char)
 {
-  int i, nargs = cast_int(L->top - L->base);
+  int i, nargs = (int)(L->top - L->base);
   char *buf = lj_str_needbuf(L, &G(L)->tmpbuf, (size_t)nargs);
   for (i = 1; i <= nargs; i++) {
     int32_t k = lj_lib_checkint(L, i);
@@ -181,9 +181,9 @@ static const char *classend(MatchState *ms, const char *p)
 }
 
 static const unsigned char match_class_map[32] = {
-  0, LJ_CHAR_ALPHA, 0, LJ_CHAR_CNTRL, LJ_CHAR_DIGIT, 0,0,0,0,0,0,0,
-  LJ_CHAR_LOWER, 0,0,0, LJ_CHAR_PUNCT, 0,0, LJ_CHAR_SPACE, 0,
-  LJ_CHAR_UPPER, 0, LJ_CHAR_ALNUM, LJ_CHAR_XDIGIT, 0,0,0,0,0,0,0
+  0,LJ_CHAR_ALPHA,0,LJ_CHAR_CNTRL,LJ_CHAR_DIGIT,0,0,LJ_CHAR_GRAPH,0,0,0,0,
+  LJ_CHAR_LOWER,0,0,0,LJ_CHAR_PUNCT,0,0,LJ_CHAR_SPACE,0,
+  LJ_CHAR_UPPER,0,LJ_CHAR_ALNUM,LJ_CHAR_XDIGIT,0,0,0,0,0,0,0
 };
 
 static int match_class(int c, int cl)
@@ -653,20 +653,18 @@ static void addquoted(lua_State *L, luaL_Buffer *b, int arg)
   const char *s = strdata(str);
   luaL_addchar(b, '"');
   while (len--) {
-    switch (*s) {
-    case '"': case '\\': case '\n':
+    if (*s == '"' || *s == '\\' || *s == '\n') {
       luaL_addchar(b, '\\');
       luaL_addchar(b, *s);
-      break;
-    case '\r':
-      luaL_addlstring(b, "\\r", 2);
-      break;
-    case '\0':
-      luaL_addlstring(b, "\\000", 4);
-      break;
-    default:
+    } else if (lj_char_iscntrl(uchar(*s))) {
+      uint32_t c1, c2, c3;
+      luaL_addchar(b, '\\');
+      c1 = uchar(*s); c3 = c1 % 10; c1 /= 10; c2 = c1 % 10; c1 /= 10;
+      if (c1 + lj_char_isdigit(uchar(s[1]))) luaL_addchar(b, '0' + c1);
+      if (c2 + (c1 + lj_char_isdigit(uchar(s[1])))) luaL_addchar(b, '0' + c2);
+      luaL_addchar(b, '0' + c3);
+    } else {
       luaL_addchar(b, *s);
-      break;
     }
     s++;
   }
@@ -739,7 +737,7 @@ LJLIB_CF(string_format)
 	tv.n = lj_lib_checknum(L, arg);
 	if (LJ_UNLIKELY((tv.u32.hi << 1) >= 0xffe00000)) {
 	  /* Canonicalize output of non-finite values. */
-	  char *p, nbuf[LUAI_MAXNUMBER2STR];
+	  char *p, nbuf[LJ_STR_NUMBUF];
 	  size_t len = lj_str_bufnum(nbuf, &tv);
 	  if (strfrmt[-1] == 'E' || strfrmt[-1] == 'G') {
 	    nbuf[len-3] = nbuf[len-3] - 0x20;
@@ -793,7 +791,7 @@ LUALIB_API int luaopen_string(lua_State *L)
 {
   GCtab *mt;
   global_State *g;
-  LJ_LIB_REG(L, string);
+  LJ_LIB_REG(L, LUA_STRLIBNAME, string);
 #if defined(LUA_COMPAT_GFIND)
   lua_getfield(L, -1, "gmatch");
   lua_setfield(L, -2, "gfind");
@@ -803,7 +801,7 @@ LUALIB_API int luaopen_string(lua_State *L)
   g = G(L);
   setgcref(basemt_it(g, LJ_TSTR), obj2gco(mt));
   settabV(L, lj_tab_setstr(L, mt, mmname_str(g, MM_index)), tabV(L->top-1));
-  mt->nomm = cast_byte(~(1u<<MM_index));
+  mt->nomm = (uint8_t)(~(1u<<MM_index));
   return 1;
 }
 
