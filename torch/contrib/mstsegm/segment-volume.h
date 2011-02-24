@@ -38,13 +38,13 @@ static inline float vdiff(image<float> ***feats,
  * min_size: minimum component size (enforced by post-processing stage).
  * num_ccs: number of connected components in the segmentation.
  */
-image<rgb> **segment_volume(image<float> ***feats, 
-                            int nslices,
-                            int nfeats,
-                            float sigma, float c, int min_size,
-                            int dt,
-                            int *num_ccs,
-                            int method) {
+static image<rgb> **segment_volume(image<float> ***feats, 
+                                   int nslices,
+                                   int nfeats,
+                                   float sigma, float c, int min_size,
+                                   int dt,
+                                   int method,
+                                   int *num_ccs) {
   // get dims
   image<float> *im = feats[0][0];
   int width = im->width();
@@ -62,15 +62,14 @@ image<rgb> **segment_volume(image<float> ***feats,
   }
 
   // graph data;
-  edge *edges; int num = 0;
+  edge *edges=NULL; int num = 0;
 
-  // 2 methods (0=few edges, 1=lots of them)
-  if (method == 0) {
+  // 2 methods (0 = 4 edges per vertex, 1 = 8 edges per vertex)
+  if (method == 4 || method == 6) {
 
-    // build graph
-    edges = new edge[width*height*(nslices-1)*5];
-    num = 0;
-    for (int z = 0; z < nslices-1; z++) {
+    // build graph with 4-connex
+    edges = new edge[width*height*nslices*2 + width*height*(nslices-1)];
+    for (int z = 0; z < nslices; z++) {
       for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
           if (x < width-1) {
@@ -87,31 +86,19 @@ image<rgb> **segment_volume(image<float> ***feats,
             num++;
           }
 
-
-          if ((x < width-1) && (y < height-1)) {
+          if (z < (nslices-1)) {
             edges[num].a = (z * height + y) * width + x;
-            edges[num].b = (z * height + (y+1)) * width + (x+1);
-            edges[num].w = vdiff(smoothed, nfeats, x, y, z, x+1, y+1, z, dt);
+            edges[num].b = ((z+1) * height + y) * width + x;
+            edges[num].w = vdiff(smoothed, nfeats, x, y, z, x, y, z+1, dt);
             num++;
           }
-
-          if ((x < width-1) && (y > 0)) {
-            edges[num].a = (z * height + y) * width + x;
-            edges[num].b = (z * height + (y-1)) * width + (x+1);
-            edges[num].w = vdiff(smoothed, nfeats, x, y, z, x+1, y-1, z, dt);
-            num++;
-          }
-
-          edges[num].a = (z * height + y) * width + x;
-          edges[num].b = ((z+1) * height + y) * width + x;
-          edges[num].w = vdiff(smoothed, nfeats, x, y, z, x, y, z+1, dt);
-          num++;
         }
       }
     }
 
-  } else {
-    // build graph
+  } else if (method == 8 || method == 10) {
+
+    // build graph with 8-connex
     edges = new edge[width*height*nslices*4 + width*height*(nslices-1)];
     for (int z = 0; z < nslices; z++) {
       for (int y = 0; y < height; y++) {
@@ -154,18 +141,72 @@ image<rgb> **segment_volume(image<float> ***feats,
         }
       }
     }
+
+  } else if (method > 100) {
+
+    // build graph with 4-connex on spatial plane, and the rest in temporal
+    // dim
+    int dist = method - 100;
+    edges = new edge[width*height*nslices*(3+dist*2)];
+    for (int z = 0; z < nslices; z++) {
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          if (x < width-1) {
+            edges[num].a = (z * height + y) * width + x;
+            edges[num].b = (z * height + y) * width + (x+1);
+            edges[num].w = vdiff(smoothed, nfeats, x, y, z, x+1, y, z, dt);
+            num++;
+          }
+
+          if (y < height-1) {
+            edges[num].a = (z * height + y) * width + x;
+            edges[num].b = (z * height + (y+1)) * width + x;
+            edges[num].w = vdiff(smoothed, nfeats, x, y, z, x, y+1, z, dt);
+            num++;
+          }
+
+          if (z < (nslices-1)) {
+            edges[num].a = (z * height + y) * width + x;
+            edges[num].b = ((z+1) * height + y) * width + x;
+            edges[num].w = vdiff(smoothed, nfeats, x, y, z, x, y, z+1, dt);
+            num++;
+
+            for (int k = 0; k < dist; k++) {
+              int step = 2 << k;
+
+              if (y < height-step) {
+                edges[num].a = (z * height + y) * width + x;
+                edges[num].b = ((z+1) * height + (y+step)) * width + x;
+                edges[num].w = vdiff(smoothed, nfeats, x, y, z, x, y+step, z+1, dt) + k;
+                num++;
+              }
+
+              if (x < width-step) {
+                edges[num].a = (z * height + y) * width + x;
+                edges[num].b = ((z+1) * height + y) * width + (x+step);
+                edges[num].w = vdiff(smoothed, nfeats, x, y, z, x+step, y, z+1, dt) + k;
+                num++;
+              }
+            }
+          }
+        }
+      }
+    }
+
+  } else {
+    THError("<libmstsegm.infer> unsupported connectivity (only 8, 4 or rad-N are valid)");
   }
 
   // cleanup
   for (int i=0; i<nslices; i++) {
-    for (int k=0; k<3; k++) delete smoothed[i][k];
+    for (int k=0; k<nfeats; k++) delete smoothed[i][k];
     delete smoothed[i];
   }
   delete [] smoothed;
 
   // segment
   universe *u = segment_graph(width*height*nslices, num, edges, c);
-  
+
   // post process small components
   for (int i = 0; i < num; i++) {
     int a = u->find(edges[i].a);

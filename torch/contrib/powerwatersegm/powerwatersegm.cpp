@@ -43,8 +43,11 @@ knowledge of the CeCILL license and that you accept its terms.
 // To load this lib in LUA:
 // require 'libpowerwatersegm'
 
+extern "C" {
 #include <luaT.h>
 #include <TH.h>
+}
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -52,6 +55,7 @@ knowledge of the CeCILL license and that you accept its terms.
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+
 #include <mccodimage.h>
 #include <mcimage.h>
 #include <cccodimage.h>

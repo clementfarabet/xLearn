@@ -30,6 +30,7 @@ function Module:read(file)
 end
 
 function Module:share(mlp, ...)
+   local arg = {...}
    for i,v in ipairs(arg) do
       if self[v] ~=nil then self[v]:set(mlp[v]) end
    end

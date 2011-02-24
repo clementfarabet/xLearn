@@ -1,39 +1,48 @@
 local ImageSource, parent = torch.class('nn.ImageSource', 'nn.Module')
 
-local help_desc = 
-[[an image/video source, to abstract cameras/videos/images]]
+local help_desc = [[
+An image/video source, to abstract cameras/videos/images.
 
-local help_example = 
-[[-- grab a frame from camera, resize it, and convert it to YUV
+-- grab a frame from camera, resize it, and convert it to YUV
 grabber = nn.ImageSource('camera')
 resize = nn.ImageRescale(320,240,3)
 converter = nn.ImageTransform('rgb2y')]]
 
-function ImageSource:__init(type, source, idx, nbuffers, fps)
+function ImageSource:__init(...)
    -- parent init
    parent.__init(self)
 
-   if not type then
-      error(toolBox.usage('nn.ImageSource',
-                          help_desc,
-                          help_example,
-                          {type='string', help='source type = camera | video | lena', req=true},
-                          {type='string', help='driver for camera = opencv | camiface | libv4l'},
-                          {type='number', help='optional camera index (default is 0)'},
-                          {type='number', help='optional number of buffers (v4l2 only, default is 1)'},
-                          {type='number', help='optional frame rate (v4l2 only, default is 30)'}))
-   end
+   -- parse args
+   local args, type, source, idx, nbuffers, fps, length, width, height, path = toolBox.unpack(
+      {...},
+      'ImageSource', help_desc,
+      {arg='type', type='string', help='source type = camera | video | lena', req=true},
+      {arg='driver', type='string', help='camera driver: opencv | camiface | libv4'},
+      {arg='cam_idx', type='number', help='optional camera index', default=0},
+      {arg='cam_buffers', type='number', help='optional number of buffers (v4l2 only)', default=1},
+      {arg='fps', type='number', help='optional frame rate (v4l2 + video file)', default=30},
+      {arg='length', type='number', help='optional length (video file only, seconds)', default=5},
+      {arg='width', type='number', help='width', default=640},
+      {arg='height', type='number', help='height', default=480},
+      {arg='path', type='string', help='path to video, for source == video'}
+   )
+
+   -- store args
+   self.camidx = idx
+   self.nbuffers = nbuffers
+   self.fps = fps
+   self.length = length
+   self.width = width
+   self.height = height
+
+   -- default VGA buffer (for camera drivers)
+   self.VGA = torch.Tensor(640, 480, 3)
 
    -- error messages
    self.ERROR_UNKNOWN = "# ERROR: unknown type"
    self.ERROR_NOTFOUND = "# ERROR: source not found"
    self.WARNING_NOCAMERA = "# WARNING: no camera found, defaulting to lena"
    self.ERROR_NOBACKWARD = '# ERROR: ImageSource has no gradient !!'
-   
-   -- extra args
-   self.camidx = idx or 0
-   self.nbuffers = nbuffers or 1
-   self.fps = fps or 30
 
    if type == 'camera' then
       if source == 'opencv' then
@@ -72,7 +81,9 @@ function ImageSource:__init(type, source, idx, nbuffers, fps)
          end
       end
    elseif type == 'video' then
-      error(self.ERROR_UNKNOWN)
+      print('loading video from file ' .. path)
+      self.video = Video{path=path,fps=fps,length=length,width=width,height=height}
+      self.source = 'video'
    elseif type == 'lena' then
       self.source = 'lena'
    else
@@ -81,21 +92,26 @@ function ImageSource:__init(type, source, idx, nbuffers, fps)
 end
 
 function ImageSource:forward()
+   self.output:resize(self.width,self.height,3)
    if self.source == 'cam-cv' then
-      self.output:resize(640,480,3)
-      libopencv.captureFromCam(self.output,self.camidx)
+      libopencv.captureFromCam(self.VGA,self.camidx)
+      image.scale(self.VGA, self.output, 'bilinear')
    elseif self.source == 'v4linux' then
-      self.output:resize(640,480,3)
-      libv4l.grabFrame(self.output,'/dev/video'..self.camidx,self.nbuffers,self.fps)
+      libv4l.grabFrame(self.VGA,'/dev/video'..self.camidx,self.nbuffers,self.fps)
+      image.scale(self.VGA, self.output, 'bilinear')
    elseif self.source == 'cam-iface' then
-      self.output:resize(640,480,3)
-      self.camera:getFrame(self.output)
+      self.camera:getFrame(self.VGA)
+      image.scale(self.VGA, self.output, 'bilinear')
    elseif self.source == 'lena' then
-      self.output:resize(640,480,3)
       if not self.lena then
          self.lena = image.lena()
-         image.scale(self.lena, self.output, 'bilinear')
+         self.lenas = torch.Tensor():resizeAs(self.output)
+         image.scale(self.lena, self.lenas, 'bilinear')
       end
+      self.output:copy(self.lenas)
+   elseif self.source == 'video' then
+      local next = self.video:forward()
+      image.scale(next, self.output, 'bilinear')
    end
    return self.output
 end

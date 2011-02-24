@@ -552,6 +552,361 @@ int toolbox_mapFixedPoint(lua_State *L){
 
 
 
+
+
+
+
+
+void get_k_max_heap(double* array, int n, int k, int* answer){
+  int i,j,f;
+
+  int heap_full = 0;
+  answer[0] = 0;
+  int curr_full = 1;
+  
+  
+  for(i = 1; i < n; i++){
+    if (heap_full == 0){
+      //DEBUG
+      //printf("heap before, i = %d, array[i] = %f:\n", i, array[i]);
+      //for(f = 0; f< curr_full; f++){
+      //	printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+      //}
+
+      answer[curr_full] = i;
+      curr_full++;
+      if(curr_full >= k)
+	heap_full = 1;
+      for(j = curr_full-1; j > 0; j=(j-1)/2){
+	int head_idx = (j-1)/2;
+    
+	if(array[answer[j]] < array[answer[head_idx]]){
+	  int temp = answer[head_idx];
+	  answer[head_idx] = answer[j];
+	  answer[j] = temp;
+	}
+	
+      }
+      //DEBUG
+      //printf("heap after, i = %d, array[i] = %f:\n", i, array[i]);
+      //for(f = 0; f< curr_full; f++){
+      //	printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+      //}
+    }
+    else{
+      //DEBUG
+      //printf("heap full\n");
+      
+      //printf("heap before, i = %d, array[i] = %f:\n", i, array[i]);
+      //for(f = 0; f< curr_full; f++){
+      //	printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+      //}
+
+      if (array[i] > array[answer[0]]){
+	answer[0] = i;
+	
+	for(j = 0;  j < k; ){
+	  // left son
+	  int left_idx = j*2 + 1;
+	  // right son
+	  int right_idx = j*2 + 2;
+
+	  if(left_idx < k && right_idx < k){
+	    //DEBUG
+	    //printf("2 sons\n");
+	    int max_son = 0;
+	    if(array[answer[left_idx]] < array[answer[right_idx]])
+	      max_son = left_idx;
+	    else max_son = right_idx;
+	    
+	    if(array[answer[j]] > array[answer[max_son]]){
+	      int temp1 = answer[j];
+	      answer[j] = answer[max_son];
+	      answer[max_son] = temp1;
+	      //DEBUG
+	      //printf("2 sons swap between: %d and %d\n", j, max_son);
+	      j = max_son;
+	    }
+	    else {
+	      //DEBUG
+	      //printf("out of 2 sons with j = %d\n", j);
+	      goto out;
+	    }
+	    
+	  }
+	  else if(left_idx < k){
+	    //DEBUG
+	    //printf("only left son\n");
+	    if(array[answer[j]] > array[answer[left_idx]]){
+	      int temp1 = answer[j];
+	      answer[j] = answer[left_idx];
+	      answer[left_idx] = temp1;
+	      //DEBUG
+	      //printf("left son swap between: %d and %d\n", j, left_idx);
+	      j = left_idx;
+	    }
+	    else{
+	      //DEBUG
+	      //printf("out of left son with j = %d\n", j);
+	      goto out;
+	    }
+	  
+	  }
+	  else if(right_idx < k){
+	    printf("never get here\n");
+	  }
+	  else{
+	    //DEBUG
+	    //printf("out of no sons with j = %d\n", j);
+	    goto out; }
+	}
+      
+      }
+    out: 
+      ;
+      //DEBUG
+      //printf("out\n");
+	
+      //printf("heap after, i = %d, array[i] = %f:\n", i, array[i]);
+      //for(f = 0; f< curr_full; f++){
+      //	printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+      //}
+    
+    }
+  }
+}
+
+void sort_heap(double* array, int n, int k, int* answer, int* sorted){
+  int i,j,f;
+  int curr_full = k;
+  
+  for(i = 0; i < k; i++){
+    //DEBUG
+    //printf("heap before, i = %d, answer[i] = %d:\n", i, answer[i]);
+    //for(f = 0; f< curr_full; f++){
+    //  printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+    //}
+
+    sorted[(k-1) - i] = answer[0];
+    answer[0] = answer[curr_full-1];
+
+    curr_full--;
+    
+    //DEBUG
+    //printf("heap before, i = %d, answer[i] = %d:\n", i, answer[i]);
+    //for(f = 0; f< curr_full; f++){
+    //  printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+    //}
+    
+    for(j = 0;  j < curr_full; ){
+      // left son
+      int left_idx = j*2 + 1;
+      // right son
+      int right_idx = j*2 + 2;
+      
+      if(left_idx < curr_full && right_idx < curr_full){
+	//DEBUG
+	//printf("2 sons\n");
+	int max_son = 0;
+	if(array[answer[left_idx]] < array[answer[right_idx]])
+	  max_son = left_idx;
+	else max_son = right_idx;
+	
+	if(array[answer[j]] > array[answer[max_son]]){
+	  int temp1 = answer[j];
+	  answer[j] = answer[max_son];
+	  answer[max_son] = temp1;
+	  //DEBUG
+	  //printf("2 sons swap between: %d and %d\n", j, max_son);
+	  j = max_son;
+	}
+	else {
+	  //DEBUG
+	  //printf("out of 2 sons with j = %d\n", j);
+	  goto out;
+	}
+	  
+      }
+      else if(left_idx < curr_full){
+	//DEBUG
+	//printf("only left son\n");
+	if(array[answer[j]] > array[answer[left_idx]]){
+	  int temp1 = answer[j];
+	  answer[j] = answer[left_idx];
+	  answer[left_idx] = temp1;
+	  //DEBUG
+	  //printf("left son swap between: %d and %d\n", j, left_idx);
+	  j = left_idx;
+	}
+	else{
+	  //DEBUG
+	  //printf("out of left son with j = %d\n", j);
+	  goto out;
+	}
+	  
+      }
+      else if(right_idx < curr_full){
+	printf("never get here\n");
+      }
+      else{
+	//DEBUG
+	//printf("out of no sons with j = %d\n", j);
+	goto out; }
+    }
+      
+  out:
+    ;
+    //DEBUG
+    //printf("out\n");
+    
+    //printf("heap after, i = %d, answer[i] = %d:\n", i, answer[i]);
+    //for(f = 0; f< curr_full; f++){
+    //  printf("%d, max = %12.4f\n", answer[f], array[answer[f]]);
+    //}
+  }
+  
+}
+
+
+/*
+ * This function receives a tensor, 'pointSize' - of the point area, and 
+ * 'k' - number of local maxima needed to find, and 'answer' - array
+ * with answer coordinates
+ * 
+ * The function saves to array 'answer' coordinates of the left top corner
+ * squares of size 'pointSize'x'pointSize' sorted in the decending order.
+ * These squares are the local maxima areas in the input tensor.
+ */
+
+int toolbox_get_k_local_maxima(lua_State *L){
+  /* get the arguments */
+  THTensor * tensor = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * answer = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  int pointSize =  lua_tonumber(L, 3);
+  int k = lua_tonumber(L, 4);
+
+  double * data_tensor = tensor->storage->data+ tensor->storageOffset;
+  double * data_answer = answer->storage->data+ answer->storageOffset;
+  
+  int tensor_width = tensor->size[0];
+  int tensor_height = tensor->size[1];
+
+  int area_width = floor(tensor_width/pointSize);
+  int area_height = floor(tensor_height/pointSize);
+    
+  //allocate array to store max areas of input tensor
+  double* area_max = (double*)malloc(sizeof(double)*area_height*area_width);
+
+  int i, j, l, m, area_idx = 0, c_border = 0, h_border;
+  double* ptr_tens ;
+  
+  // DEBUG
+  //printf("tens. height = %d, tens. width = %d, tens->stride[0] = %d, tens->stride[1] = %d\n", tensor_height, tensor_width, tensor->stride[0], tensor->stride[1]);
+  //printf("\nInput tensor:\n");
+  //ptr_tens = data_tensor;
+  //for(i = 0; i < tensor_height; i++){
+  //  for(j = 0; j < tensor_width; j++){
+  //    printf("%f ", ptr_tens[j*tensor->stride[0]]);
+  //  }
+  //  ptr_tens += tensor->stride[1];
+  //  printf("\n");
+  //} 
+
+
+
+
+  ptr_tens = data_tensor;
+  for(i = 0; i < tensor_height;){
+    for(j = 0; j < tensor_width;){
+
+
+      c_border = min(pointSize, tensor_width - j);
+      h_border = min(pointSize, tensor_height - i);
+
+      if (c_border == pointSize && h_border == pointSize){
+	double max_value = ptr_tens[j*tensor->stride[0]];
+	
+	// find max
+	for(l = 0; l < c_border; l++){
+	  for(m = 0; m < h_border; m++){
+	    
+	    //DEBUG
+	    //printf("i = %d, j = %d, l = %d, m = %d, c_border = %d, h_border = %d, area_idx = %d, tensor_idx = %d, value = %f\n", i,j,l,m,c_border, h_border, area_idx, j*tensor->stride[0]+ l + m*tensor->stride[1], ptr_tens[j*tensor->stride[0]+ l + m*tensor->stride[1]]);
+	    
+	    if(max_value < ptr_tens[j*tensor->stride[0]+ l + m*tensor->stride[1]])
+	      max_value = ptr_tens[j*tensor->stride[0]+ l + m*tensor->stride[1]];
+	  }
+	}
+	//DEBUG
+	//printf("max value = %f\n", max_value);
+	// save value to array of max areas
+	area_max[area_idx] = max_value;
+	// update pointers
+	area_idx++;
+      }
+      j += pointSize;//h_border;
+    }
+    i += pointSize;//c_border;
+    ptr_tens += tensor->stride[1]*pointSize;//*c_border;
+  }
+  
+  // DEBUG
+  //printf("\nArray of max areas:\n");
+  //for(i = 0; i < area_width; i++){
+  //  for(j = 0; j < area_height; j++){
+  //    printf("%f ", area_max[i*area_width+j]);
+  //  }
+  //  printf("\n");
+  //} 
+
+
+  // allocate array to store heap
+  int* heap_of_k_max = (int*)malloc(sizeof(int)*k);
+  
+  get_k_max_heap(area_max, area_height*area_width, k, heap_of_k_max);
+
+  // DEBUG
+  //printf("\nHeap of k max:\n");
+  //for(i = 0; i < k; i++){
+  //  printf("max index = %d, max value = %f \n", heap_of_k_max[i], area_max[heap_of_k_max[i]]);
+  //} 
+  // allocate array to store sorted heap
+  int* sorted_heap = (int*)malloc(sizeof(int)*k);
+
+  sort_heap(area_max, area_height*area_width, k, heap_of_k_max, sorted_heap);
+  
+  // DEBUG
+  //printf("\nSorted heap:\n");
+  //for(i = 0; i < k; i++){
+  //  printf("max index = %d, max value = %f \n", sorted_heap[i], area_max[sorted_heap[i]]);
+  //}  
+  
+  // now get the (x,y) position in the original array
+  for(i = 0; i < k; i++){
+    // convert from 1D coordinate to 2D coordnates
+    double temp_x = sorted_heap[i]%area_width;
+    double temp_y = floor(sorted_heap[i]/area_height);
+    
+    // now convert from max area array coordinates to input tensor coordinates
+    double x = temp_x*pointSize;
+    double y = temp_y*pointSize;
+    // add 1 because in Lua index strats from 1
+    data_answer[i*answer->stride[1] + 0] = x + 1; 
+    data_answer[i*answer->stride[1] + 1] = y + 1;
+  }
+
+  // free the allocated memory
+  free(area_max);
+  free(heap_of_k_max);
+  free(sorted_heap);
+
+  return 0;
+}
+
+
+
+
+
 /*
  * Converts an RGB color value to HSL. Conversion formula
  * adapted from http://en.wikipedia.org/wiki/HSL_color_space.

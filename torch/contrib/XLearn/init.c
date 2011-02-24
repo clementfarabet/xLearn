@@ -32,6 +32,8 @@ extern int toolbox_spatialDist(lua_State *L);
 extern int toolbox_dist2vectors(lua_State *L);
 extern int toolbox_convFixedPoint(lua_State *L);
 extern int toolbox_mapFixedPoint(lua_State *L);
+extern int toolbox_get_k_local_maxima(lua_State *L);
+
 /*
 extern int toolbox_ncursePrint(lua_State *L);
 extern int toolbox_ncurseStart(lua_State *L);
@@ -56,6 +58,7 @@ static const struct luaL_reg extraroutines [] = {
   {"Dist2",toolbox_dist2vectors},
   {"convFixedPoint",toolbox_convFixedPoint},
   {"mapFixedPoint",toolbox_mapFixedPoint},
+  {"get_k_local_maxima",toolbox_get_k_local_maxima},
   {"image_maskToRGB", image_maskToRGB},
   {"rgb2hsl", image_rgb2hsl},
   {"hsl2rgb", image_hsl2rgb},

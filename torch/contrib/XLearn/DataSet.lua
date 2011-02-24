@@ -12,8 +12,10 @@ do
    function DataSet:__init(args)
       self.resized = false
       self.nbSamples = 0
-      self.cacheFileName = nil
-      if args then
+      self.cacheFileName = args.cacheFile
+      if paths.filep(self.cacheFileName) then
+         self:open(self.cacheFileName)
+      elseif args and args.dataSetFolder then
          self:load(args)
       end
    end
@@ -22,7 +24,8 @@ do
       return self.nbSamples 
    end
 
-   function DataSet:load(args)
+   function DataSet:load(...)
+      local args = {...}
       -- parse args      
       local dataSetFolder = args.dataSetFolder or error('please provide a path to dataset')
       local nbSamplesRequired = args.nbSamplesRequired or 'all'
@@ -97,13 +100,22 @@ do
       self[self.nbSamples] = {input, output}
    end
 
-   function DataSet:append(args)
+   function DataSet:append(...)
       -- parse args
-      local dataSetFolder = args.dataSetFolder or error('please provide a folder')
-      local files = paths.dir(args.dataSetFolder)
-      local chanels = args.chanels or 1
-      local nbSamplesRequired = args.nbSamplesRequired
+      local args, dataSetFolder, chanels, nbSamplesRequired, useLabelPiped, useDirAsLabel, nbLabels    
+         = toolBox.unpack({...},
+                          'DataSet:append', 'append a folder to the dataset object',
+                          {arg='dataSetFolder', type='string', help='size of history buffer (e.g. past frames kept)', req=true},
+                          {arg='chanels', type='number', help='number of chanels for the image to load', default=3},
+                          {arg='nbSamplesRequired', type='number', help='max number of samples to load'},
+                          {arg='useLabelPiped', type='boolean', help='flag to use the filename as output value',default=false},
+                          {arg='useDirAsLabel', type='boolean', help='flag to use the directory as label',default=true},
+                          {arg='nbLabels', type='boolean', help='how many classes (goes with useDirAsLabel)', default=1})
+      -- data size:
 
+
+      local files = paths.dir(args.dataSetFolder)
+      table.sort(files)
       print('# Loading samples from ' .. args.dataSetFolder .. '/')
 
       
@@ -114,6 +126,9 @@ do
          toLoad = math.min(toLoad, nbSamplesRequired)
       end
       local loaded = 0
+      local dir = toolBox.split(dataSetFolder,"/")
+      -- take last element
+      dir = dir[#dir]+0
 
       for k,file in pairs(files) do
          local input
@@ -140,7 +155,7 @@ do
          end
          
          -- if image loaded then add into the set
-         if (input and rawOutput) then
+         if (useLabelPiped and input and rawOutput) then
             table.remove(rawOutput,1) --remove file ID
             -- put input in 3D tensor
             input:resize(input:size()[1], input:size()[2], chanels)
@@ -158,7 +173,25 @@ do
             if (loaded == toLoad) then
                break
             end
+         elseif (useDirAsLabel and input) then
+            if(nbLabels < dir) then
+               error("the nbLabels is smaller than the directory id")               
+            end
+            local output = torch.Tensor(nbLabels,1):fill(0)
+            output[dir][1]=1
+            
+            -- add input/output in the set
+            self.nbSamples = self.nbSamples + 1
+            self[self.nbSamples] = {input, output}
+            loaded = loaded + 1
+            if (loaded == toLoad) then
+               break
+            end
          end
+--          else
+--             print("input",input,file)
+--             error("Unknow method for label, either set 'useLabelPiped' or 'useDirAsLabel'")
+--          end
 
       end
    end
@@ -208,8 +241,8 @@ do
    end
 
    function DataSet:resize(w,h)
-      self.resized = true
       error( toolBox.NOT_IMPLEMENTED )
+      self.resized = true
    end
 
    function DataSet:shuffle()
@@ -228,22 +261,20 @@ do
    end
 
    function DataSet:display(args) -- opt args : scale, nbSamples
+      local args = args or {}
       -- arg list:
       local min, max, nbSamples, scale, w
-      local title = 'dataset'
+      local title = args.title or args.legend or 'dataset'
       local resX = 800
       local resY = 600
-      -- parse args:
-      if (args ~= nil) then
-         min = args.min
-         max = args.max
-         nbSamples = args.nbSamples or self.nbSamples
-         scale = args.scale
-         title = args.title or title
-         w = window or gfx.Window(resX, resY, title)
-         resX = args.resX or resX
-         resY = args.resY or resY
-      end
+      min = args.min
+      max = args.max
+      nbSamples = args.nbSamples or self.nbSamples
+      scale = args.scale
+      title = args.title or title
+      w = self.window or gfx.Window(resX, resY, title)
+      resX = args.resX or resX
+      resY = args.resY or resY
 
       local step_x = 0
       local step_y = 0
@@ -257,16 +288,20 @@ do
       end
 
       for i=1,nbSamples do
+         local idx = i
+         if args.nbSamples then
+            idx = math.random(1,self.nbSamples)
+         end
          if (step_x >= resX) then
             step_x = 0
-            step_y = step_y + self[i][1]:size()[2]*scale
+            step_y = step_y + self[idx][1]:size()[2]*scale
             if (step_y >= resY) then
                break
             end
          end
-         local tmp  = image.scaleForDisplay{tensor=self[i][1], min=min, max=max}
+         local tmp  = image.scaleForDisplay{tensor=self[idx][1], min=min, max=max}
          w:blit(tmp, scale, step_x, step_y, title)
-         step_x = step_x + self[i][1]:size()[1]*scale
+         step_x = step_x + self[idx][1]:size()[1]*scale
       end
    end
    

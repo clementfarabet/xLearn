@@ -63,6 +63,7 @@ do
       self.legend = args.legend
       self.fontsize = args.fontsize or 16
       self.painter = args.painter 
+         or self.painter
          or qtwidget.newwindow(args.tensor:size(1)*self.zoom*self.globalzoom,
                                args.tensor:size(2)*self.zoom*self.globalzoom,
                                self.legend)

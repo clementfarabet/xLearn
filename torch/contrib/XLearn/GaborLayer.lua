@@ -46,7 +46,7 @@ function GaborLayer:reset(stdv)
          ..self.nbFrequencies..' freqs)')
    for angle=0,math.pi,math.pi/self.nbOrientations do
       for k = 1,self.nbFrequencies do
-         local period = (k+1)/self.nbFrequencies
+         local period = (k)/self.nbFrequencies
          if (i==(self.nbFilters+1)) then return end
          kernelBank:select(3,i):copy(image.gabor(self.size, 1/5, angle, period, 1))
          kernelBank:select(3,i):add(-kernelBank:select(3,i):mean())

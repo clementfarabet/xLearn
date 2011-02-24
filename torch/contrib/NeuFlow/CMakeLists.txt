@@ -1,7 +1,6 @@
 
 SET(src )
 
-
 FILE(GLOB MyCSources segments/coef*)
 
 SET(luasrc defines.lua
@@ -19,9 +18,4 @@ SET(luasrc defines.lua
 	   init.lua
 	   ${MyCSources})
 
-
-
 ADD_TORCH_PACKAGE(NeuFlow "${src}" "${luasrc}") 
-
-
-TARGET_LINK_LIBRARIES(NeuFlow)

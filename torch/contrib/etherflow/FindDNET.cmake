@@ -89,13 +89,13 @@ SET(DNET_LIBRARIES ${DNET_LIBRARY})
 IF(DNET_INCLUDE_DIRS)
   MESSAGE(STATUS "Dnet include dirs set to ${DNET_INCLUDE_DIRS}")
 ELSE(DNET_INCLUDE_DIRS)
-  MESSAGE(FATAL " Dnet include dirs cannot be found")
+  MESSAGE(STATUS "Dnet include dirs cannot be found")
 ENDIF(DNET_INCLUDE_DIRS)
 
 IF(DNET_LIBRARIES)
   MESSAGE(STATUS "Dnet library set to ${DNET_LIBRARIES}")
 ELSE(DNET_LIBRARIES)
-  MESSAGE(FATAL "Dnet library cannot be found")
+  MESSAGE(STATUS "Dnet library cannot be found")
 ENDIF(DNET_LIBRARIES)
 
 #Is dnet found ?

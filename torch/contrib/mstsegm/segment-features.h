@@ -39,6 +39,8 @@ static inline float ndiff(image<float> **feats,
     res = sqrt(dist);
     // printf("result: %f\n", res);
   } else if (dt == angle) {
+    // FIXME need to handle different cases of acos
+    // acos(x) : x must be between -1,1 result is between 0 and pi
     res = acos(dot/(sqrt(normx)*sqrt(normy)));
     //printf("result %f dot: %f nx: %d ny:%d\n", res, dot, normx, normy);
   }
@@ -60,7 +62,7 @@ static inline float ndiff(image<float> **feats,
 image<rgb> *segment_features(image<float> **feats, 
                              int nfeats,
                              float sigma, float c, int min_size,
-			     int dt,
+			     int dt, int method,
                              int *num_ccs) {
   // get first feature map
   image<float> *im = feats[0];
@@ -74,39 +76,70 @@ image<rgb> *segment_features(image<float> **feats,
   for (int i=0; i<nfeats; i++)
     smoothed[i] = smooth(feats[i],sigma);
 
-  // build graph
-  edge *edges = new edge[width*height*4];
-  int num = 0;
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      if (x < width-1) {
-	edges[num].a = y * width + x;
-	edges[num].b = y * width + (x+1);
-	edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y, dt);
-	num++;
-      }
+  // graph data;
+  edge *edges=NULL; int num = 0;
 
-      if (y < height-1) {
-	edges[num].a = y * width + x;
-	edges[num].b = (y+1) * width + x;
-	edges[num].w = ndiff(smoothed, nfeats, x, y, x, y+1, dt);
-	num++;
-      }
+  // 2 methods (0 = 4 edges per vertex, 1 = 8 edges per vertex)
+  if (method == 4) {
 
-      if ((x < width-1) && (y < height-1)) {
-	edges[num].a = y * width + x;
-	edges[num].b = (y+1) * width + (x+1);
-	edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y+1, dt);
-	num++;
-      }
+    // build graph with 4-connex
+    edges = new edge[width*height*2];
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (x < width-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = y * width + (x+1);
+          edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y, dt);
+          num++;
+        }
 
-      if ((x < width-1) && (y > 0)) {
-	edges[num].a = y * width + x;
-	edges[num].b = (y-1) * width + (x+1);
-	edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y-1, dt);
-	num++;
+        if (y < height-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y+1) * width + x;
+          edges[num].w = ndiff(smoothed, nfeats, x, y, x, y+1, dt);
+          num++;
+        }
       }
     }
+
+  } else if (method == 8) {
+
+    // build graph with 8-connex
+    edges = new edge[width*height*4];
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (x < width-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = y * width + (x+1);
+          edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y, dt);
+          num++;
+        }
+
+        if (y < height-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y+1) * width + x;
+          edges[num].w = ndiff(smoothed, nfeats, x, y, x, y+1, dt);
+          num++;
+        }
+
+        if ((x < width-1) && (y < height-1)) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y+1) * width + (x+1);
+          edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y+1, dt);
+          num++;
+        }
+
+        if ((x < width-1) && (y > 0)) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y-1) * width + (x+1);
+          edges[num].w = ndiff(smoothed, nfeats, x, y, x+1, y-1, dt);
+          num++;
+        }
+      }
+    }
+
+  } else {
+    THError("<libmstsegm.infer> unsupported connectivity (only 8 or 4 are valid)");
   }
   
   // cleanup

@@ -383,6 +383,81 @@ int send_tensor_double_C(double * data, int size) {
   return 0;
 }
 
+int send_tensor_double_C_ack(double * data, int size) {
+  /* get the arguments */
+  short int packet_size;
+  int elements_pointer = 0;
+  unsigned char packet[ETH_FRAME_LEN];
+  int i;
+  
+  // this is the tensor descriptor header
+  if (!neuflow_first_call) receive_frame_C(NULL);
+  neuflow_first_call = 0;
+
+  //DEBUG - do not remove!
+  //if (!neuflow_first_call){
+  //  int s_str = 64;
+  //  unsigned char* str = receive_frame_C(&s_str);
+  //  printf("\n%s\n", (str+14));
+  //}
+
+  while(elements_pointer != size){
+    // convert double -> Q8.8
+    packet_size = 0;
+    for (i = 0; i < ETH_DATA_LEN; i+=2){
+      if (elements_pointer < size){
+	
+	double val = data[elements_pointer];
+	short fixed_point = (short)(val * neuflow_one_encoding + 0.5);
+	unsigned char* point_to_short = (unsigned char*)&fixed_point;
+	packet[i] = point_to_short[0];
+	packet[i+1] = point_to_short[1];
+	
+	elements_pointer++;
+	packet_size+=2;
+      }
+      else break;
+    }
+    
+    // only the last packet could be not dividable by 4
+    while(packet_size%4 != 0){
+      packet[packet_size] = 0;
+      packet_size++;
+    }
+    
+    // smaller than min packet size - pad
+    if (packet_size < ETH_ZLEN+4) {
+      for(i = packet_size; i < ETH_ZLEN+4; i++) {packet[i] = 0;}
+      packet_size = ETH_ZLEN+4;
+    }
+    
+#ifndef _LINUX_
+    /* usleep(5); */
+/*     printf("..........\r");  */
+/*     printf("..........\r");  */
+/*     printf("..........\r");  */
+/*     printf("..........\r");  */
+/*     printf("..........\r");  */
+/*     printf("..........\r");  */
+#endif
+
+    int s_str = 64;
+    unsigned char* str = receive_frame_C(&s_str); 
+    //printf("\n%s\n", (str+14)); 
+
+    // send
+    send_frame_C(packet_size, packet);
+
+    
+  }
+
+  return 0;
+}
+
+
+
+
+
 int send_tensor_float_C(float * data, int size) {
   /* get the arguments */
   short int packet_size;
@@ -511,11 +586,12 @@ int receive_tensor_double_C(double *data, int size, int height) {
   // this is the tensor descriptor header
   if (!neuflow_first_call) receive_frame_C(NULL);
     //DEBUG - do not remove!
-    /* { */
-  /*   int s_str = 64; */
-  /*   unsigned char* str = receive_frame_C(&s_str); */
-  /*   printf("\n%s\n", (str+14)); */
-  /* } */
+  /* if (!neuflow_first_call){ */
+/*     int s_str = 64; */
+/*     unsigned char* str = receive_frame_C(&s_str); */
+/*     printf("\n%s\n", (str+14)); */
+/*   } */
+
   
 
   // if not a multiple of 4 the streamToHost function
@@ -539,7 +615,8 @@ int receive_tensor_double_C(double *data, int size, int height) {
       data[tensor_pointer] = val; 
       tensor_pointer++; 
     } 
-   
+
+    //printf("num_of_frame = %d, num_of_bytes = %d, length = %d, current_length = %d, tensor_pointer = %d, i = %d\n", num_of_frames, num_of_bytes, length, currentlength, tensor_pointer, i); 
   }
   //DEBUG - do not remove!
   //printf("num_of_frame = %d, num_of_bytes = %d, length = %d, current_length = %d, tensor_pointer = %d, i = %d\n", num_of_frames, num_of_bytes, length, currentlength, tensor_pointer, i); 
@@ -548,6 +625,77 @@ int receive_tensor_double_C(double *data, int size, int height) {
                (unsigned char *)"1234567812345678123456781234567812345678123456781234567812345678");
   return 0;
 }
+
+
+int receive_tensor_double_C_ack(double *data, int size, int height) {
+  int length = 0;
+  int currentlength = 0;
+  unsigned char *buffer;
+  int num_of_bytes = size*2; // each value is 2 bytes
+  int tensor_pointer = 0;
+  int i;
+  int num_of_frames = 0;
+  
+  
+  // this is the tensor descriptor header
+  //if (!neuflow_first_call) receive_frame_C(NULL);
+  //DEBUG - do not remove!
+  if (neuflow_first_call){
+    int s_str = 64;
+    unsigned char* str = receive_frame_C(&s_str);
+    //printf("\n%s\n", (str+14));
+    
+    s_str = 64;
+    str = receive_frame_C(&s_str);
+    //printf("\n%s\n", (str+14));
+  }
+  else {
+    int s_str = 64;
+    unsigned char* str = receive_frame_C(&s_str);
+    //printf("\n%s\n", (str+14));
+  }
+  
+
+  // if not a multiple of 4 the streamToHost function
+  //will add an extra line to the stream
+  //we want to make sure to receive it here
+  if(num_of_bytes%4 != 0){
+    num_of_bytes += (size/height)*2;
+  }
+
+  while (length < num_of_bytes){
+    /* Grab a packet */
+    buffer = receive_frame_C(&currentlength);
+    length += currentlength-ETH_HLEN;
+    num_of_frames++;
+
+    // send ack after each frame
+     send_frame_C(64, (unsigned char *)"1234567812345678123456781234567812345678123456781234567812345678");
+   
+    
+    /* Save data to tensor*/
+    for (i = ETH_HLEN; tensor_pointer < size && i < currentlength; i+=2){ 
+      short* val_short = (short*)&buffer[i]; 
+      double val = (double)*val_short; 
+      val /= neuflow_one_encoding; 
+      data[tensor_pointer] = val; 
+      tensor_pointer++; 
+    } 
+
+    
+  //DEBUG - do not remove!
+    //printf("num_of_frame = %d, num_of_bytes = %d, length = %d, current_length = %d, tensor_pointer = %d, i = %d\n", num_of_frames, num_of_bytes, length, currentlength, tensor_pointer, i);
+
+  }
+  
+  // send ack after each tensor
+  // send_frame_C(64,
+  //(unsigned char *)"1234567812345678123456781234567812345678123456781234567812345678");
+  return 0;
+}
+
+
+
 
 int receive_tensor_float_C(float *data, int size, int height) {
   int length = 0;
@@ -603,6 +751,16 @@ static int receive_tensor_lua(lua_State *L){
   receive_tensor_double_C(data, size, result->size[1]);
   return 0;
 }
+
+static int receive_tensor_lua_ack(lua_State *L){
+  /* get the arguments */
+  THTensor * result = luaT_toudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  double * data = result->storage->data+result->storageOffset;
+  int size = result->size[0]*result->size[1];
+  receive_tensor_double_C_ack(data, size, result->size[1]);
+  return 0;
+}
+
 
 static int receive_tensor_float_lua(lua_State *L){
   /* get the arguments */
@@ -665,6 +823,16 @@ static int send_frame_lua(lua_State *L) {
   return send_frame_C(length, (unsigned char *)data_p);
 }
 
+static int send_tensor_lua_ack(lua_State *L) {
+  /* get the arguments */
+  THTensor * tensorToSend = luaT_toudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  int size = tensorToSend->size[0] * tensorToSend->size[1];
+  double *data = tensorToSend->storage->data+tensorToSend->storageOffset;
+  send_tensor_double_C_ack(data, size);
+  return 0;
+}
+
+
 static int receive_string_lua(lua_State *L) {
   // receive frame
   int length;
@@ -695,6 +863,15 @@ static int receive_frame_lua(lua_State *L) {
   return 2;
 }
 
+static int set_first_call(lua_State *L) {
+  /* get the arguments */
+  int val = lua_tointeger(L, 1);
+  neuflow_first_call = val;
+  //DEBUG
+  //printf("set first call to %d\n", neuflow_first_call);
+  return 0;
+}
+
 
 /***********************************************************
  * register functions for Lua
@@ -705,11 +882,14 @@ static const struct luaL_reg etherflow [] = {
   {"receive_string",receive_string_lua},
   {"send_frame", send_frame_lua},
   {"send_tensor", send_tensor_lua},
+  {"send_tensor_ack", send_tensor_lua_ack},
   {"send_tensor_float", send_tensor_float_lua},
   {"send_bytetensor", send_tensor_byte_lua},
   {"receive_tensor", receive_tensor_lua},
+  {"receive_tensor_ack", receive_tensor_lua_ack},
   {"receive_tensor_float", receive_tensor_float_lua},
   {"close_socket", close_socket_lua},
+  {"set_first_call", set_first_call},
   {NULL, NULL}  /* sentinel */
 };
 

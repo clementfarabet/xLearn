@@ -58,6 +58,11 @@ local layers_table = {
          return net_compiler:LocalNorm(module, inputs)
       end,
 
+   ["nn.LocalNorm_hardware"] = 
+      function(net_compiler, module, inputs) 
+         return net_compiler:LocalNorm(module, inputs)
+      end,
+
    ["nn.SpatialPadding"] =
       function(net_compiler, module, inputs) 
          print(message.WARNING_IMPLEMENTED, module)

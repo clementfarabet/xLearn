@@ -20,7 +20,8 @@
 --
 -- now options is the table of options (key, val) and args is the table with non-option arguments.
 -- You can use op.fail(message) for failing and op.print_help() for printing the usage as you like.
-
+--
+-- modifed by Benoit Corda
 
 do
    local OptionParser = torch.class('OptionParser')
@@ -46,9 +47,19 @@ do
       end
    end
 
-   function OptionParser:parse_args()
+   function OptionParser:parse_args(options)
+      local options = options or {}
+      local args = {}
+
+      -- set the default
+      for _,v in ipairs(self.option_descriptions) do
+         if v.default ~= nil and options[v.dest]==nil then
+            options[v.dest] = v.default
+         end
+      end
+
       if not arg then
-         return {},{}
+         return options, args
       end
       -- expand options (e.g. "--input=file" -> "--input", "file")
       local arg = {unpack(arg)}
@@ -60,22 +71,25 @@ do
          end
       end
 
-      local options = {}
-      local args = {}
       local i = 1
       while i <= #arg do local v = arg[i]
          local optdesc = self.option_of[v]
          if optdesc then
+            local default = optdesc.default
+            local required = optdesc.req
             local action = optdesc.action
-            local val
+            local val = default
             if action == 'store' or action == nil then
                i = i + 1
-               val = arg[i]
+               val = arg[i] or default
                if not val then self:fail('option requires an argument ' .. v) end
             elseif action == 'store_true' then
                val = true
             elseif action == 'store_false' then
                val = false
+            end
+            if required and not val then
+               self:fail('option requires an argument ' .. v)
             end
             options[optdesc.dest] = val
          else
@@ -88,6 +102,7 @@ do
          self:print_help()
          os.exit()
       end
+      -- set the default if nil
       return options, args
    end
 
@@ -117,9 +132,15 @@ do
          pad = math.max(pad, #self:flags_str(optdesc))
       end
       for _,optdesc in ipairs(self.option_descriptions) do
+         local defstr = ''
+         if optdesc.req then
+            defstr = ' [REQUIRED]'
+         elseif optdesc.default then
+            defstr = ' [default = ' .. optdesc.default .. ']'
+         end
          io.stdout:write("  " .. self:flags_str(optdesc) ..
                       string.rep(' ', pad - #self:flags_str(optdesc)) ..
-                   "  " .. optdesc.help .. "\n")
+                   "  " .. optdesc.help .. defstr .. "\n")
       end
    end
 

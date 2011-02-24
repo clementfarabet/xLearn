@@ -8,10 +8,11 @@ do
    --
    local Profiler = torch.class('Profiler')
 
-   function Profiler:__init(mode)
+   function Profiler:__init(mode,verbose)
       self.events = {}
       self.list = {}
       self.off = (mode == 'off') or false
+      self.verbose = verbose or false
    end
 
    function Profiler:start(name, fps)
@@ -54,7 +55,10 @@ do
    end
 
    function Profiler:lap(name,divider)
-      return self:real(name,divider), self:cpu(name,divider)
+      local r = self:real(name,divider)
+      local c = self:cpu(name,divider)
+      if self.verbose then self:print(name) end
+      return r,c
    end
 
    function Profiler:format(name)

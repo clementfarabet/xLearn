@@ -40,6 +40,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #include <misc.h>
 #include "segment-volume.h"
 #include "segment-features.h"
+#include "segment-streaming.h"
+#include "segment-incremental.h"
 #include "segment-image.h"
 
 // conversion functions
@@ -145,14 +147,56 @@ static THTensor *volume_to_tensor(image<float> ***img, int feats, int z) {
   return tensor;
 }
 
+static void getEdges(THTensor *tensor) {
+  int i3,i2,i1,i0;
+  if (tensor->nDimension == 4) {
+    for (i3=0; i3<tensor->size[3]; i3++)
+      for (i1=0; i1<tensor->size[1]-1; i1++)
+        for (i0=0; i0<tensor->size[0]-1; i0++)
+          for (i2=0; i2<tensor->size[2]; i2++) {
+            if ((THTensor_get4d(tensor, i0, i1, i2, i3) != THTensor_get4d(tensor, i0+1, i1, i2, i3))
+                || (THTensor_get4d(tensor, i0, i1, i2, i3) != THTensor_get4d(tensor, i0, i1+1, i2, i3))
+                || (THTensor_get4d(tensor, i0, i1, i2, i3) != THTensor_get4d(tensor, i0+1, i1+1, i2, i3))) {
+              for (i2=0; i2<tensor->size[2]; i2++) {
+                THTensor_set4d(tensor, i0, i1, i2, i3, 1);
+              }
+              break;
+            }
+            if (i2 == tensor->size[2]-1) 
+              for (i2=0; i2<tensor->size[2]; i2++)
+                THTensor_set4d(tensor, i0, i1, i2, i3, 0);
+          }
+  } else if (tensor->nDimension == 3) {
+    for (i1=0; i1<tensor->size[1]-1; i1++)
+      for (i0=0; i0<tensor->size[0]-1; i0++)
+        for (i2=0; i2<tensor->size[2]; i2++) {
+          if ((THTensor_get3d(tensor, i0, i1, i2) != THTensor_get3d(tensor, i0+1, i1, i2))
+              || (THTensor_get3d(tensor, i0, i1, i2) != THTensor_get3d(tensor, i0, i1+1, i2))
+              || (THTensor_get3d(tensor, i0, i1, i2) != THTensor_get3d(tensor, i0+1, i1+1, i2))) {
+            for (i2=0; i2<tensor->size[2]; i2++) {
+              THTensor_set3d(tensor, i0, i1, i2, 1);
+            }
+            break;
+          }
+          if (i2 == tensor->size[2]-1) 
+            for (i2=0; i2<tensor->size[2]; i2++)
+              THTensor_set3d(tensor, i0, i1, i2, 0);
+        }
+  }
+}
+
 // Segmentation function
-int segm_lua(lua_State *L) {
+static int segm_lua(lua_State *L) {
   // defaults
   float sigma   = 0.8;
   float k       = 500;
   int min_size  = 20;
   int dist_type = 0; // 0 == euclidean, 1 == angle
   int method = 1;
+  bool incremental = false;
+  bool incremental_rst = false;
+  bool incremental_ben = false;
+  bool edges = false;
 
   // get args
   THTensor *img = (THTensor *)luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
@@ -161,6 +205,10 @@ int segm_lua(lua_State *L) {
   if (lua_isnumber(L, 4)) min_size = lua_tonumber(L, 4);
   if (lua_isnumber(L, 5)) dist_type = lua_tonumber(L, 5);
   if (lua_isnumber(L, 6)) method = lua_tonumber(L, 6);
+  if (lua_isboolean(L, 7)) incremental = lua_toboolean(L, 7);
+  if (lua_isboolean(L, 8)) incremental_rst = lua_toboolean(L, 8);
+  if (lua_isboolean(L, 8)) incremental_ben = lua_toboolean(L, 9);
+  if (lua_isboolean(L, 9)) edges = lua_toboolean(L, 10);
 
   // holds nb of segments
   int num_ccs;
@@ -170,8 +218,83 @@ int segm_lua(lua_State *L) {
   int ndims = img->nDimension;
   int nfeats = img->size[2];
 
+  // Incremental (hacked)
+  if (incremental_ben){
+    // check dims
+    if (ndims != 3) THError("<libmstsegm.infer> unsupported nb of dimensions, should be 3D");
+
+    // load new input
+    image<float> **input = tensor_to_images(img);
+
+    // process
+    seg = segment_incrementalben(input,
+                                 nfeats, incremental_rst,
+                                 sigma, k, min_size,
+                                 dist_type, method,
+                                 &num_ccs);
+
+    // return result
+    result = rgbimage_to_tensor(seg);
+
+    // clean up
+    for (int i=0; i<nfeats; i++) delete input[i];
+    delete [] input;
+    delete seg;
+
+  // Incremental implies 3 dims, which are seens as being a new slice in a 4D volume
+  } else if (incremental) {
+
+    // dims ?
+    if (ndims == 4) {
+
+      // nb slices
+      int nslices = img->size[3];
+
+      // load input (features)
+      image<float> ***input = tensor_to_volume(img);
+
+      // process
+      segs = segment_streaming(input, nslices, nfeats, incremental_rst, 
+                               sigma, k, min_size, dist_type, method, &num_ccs);
+
+      // return result
+      result = rgbvolume_to_tensor(segs, nslices);
+
+      // clean up
+      for (int i=0; i<nslices; i++) {
+        for (int k=0; k<nfeats; k++) delete input[i][k];
+        delete input[i];
+      }
+      delete [] input;
+      for (int i=0; i<nslices; i++) delete segs[i];
+      delete [] segs;
+
+    } else if (ndims == 3) {
+
+      // load new input
+      image<float> **input = tensor_to_images(img);
+
+      // process
+      seg = segment_incremental(input,
+                                nfeats, incremental_rst,
+                                sigma, k, min_size,
+                                dist_type, method,
+                                &num_ccs);
+
+      // return result
+      result = rgbimage_to_tensor(seg);
+
+      // clean up
+      for (int i=0; i<nfeats; i++) delete input[i];
+      delete [] input;
+      delete seg;
+
+    } else {
+      THError("<libmstsegm.infer> unsupported nb of dimensions");
+    }
+
   // Nb of channels ?
-  if (ndims == 4) {
+  } else if (ndims == 4) {
 
     // nb slices
     int nslices = img->size[3];
@@ -180,7 +303,7 @@ int segm_lua(lua_State *L) {
     image<float> ***input = tensor_to_volume(img);
 
     // process
-    segs = segment_volume(input, nslices, nfeats, sigma, k, min_size, dist_type, &num_ccs, method);
+    segs = segment_volume(input, nslices, nfeats, sigma, k, min_size, dist_type, method, &num_ccs);
     result = rgbvolume_to_tensor(segs, nslices);
 
     // clean up
@@ -189,6 +312,8 @@ int segm_lua(lua_State *L) {
       delete input[i];
     }
     delete [] input;
+    for (int i=0; i<nslices; i++) delete segs[i];
+    delete [] segs;
 
   } else if (ndims == 3) {
     if (nfeats == 3) {
@@ -197,11 +322,12 @@ int segm_lua(lua_State *L) {
       image<rgb> *input = tensor_to_rgbimage(img);
 
       // process
-      seg = segment_image(input, sigma, k, min_size, &num_ccs);
+      seg = segment_image(input, sigma, k, min_size, method, &num_ccs);
       result = rgbimage_to_tensor(seg);
 
       // clean up
       delete input;
+      delete seg;
 
     } else { // N channels
       
@@ -209,23 +335,28 @@ int segm_lua(lua_State *L) {
       image<float> **input = tensor_to_images(img);
       
       // process
-      seg = segment_features(input, nfeats, sigma, k, min_size, dist_type, &num_ccs);
+      seg = segment_features(input, nfeats, sigma, k, min_size, dist_type, method, &num_ccs);
       result = rgbimage_to_tensor(seg);
 
       // clean up
       for (int i=0; i<nfeats; i++) delete input[i];
       delete [] input;
+      delete seg;
     }
   } else {
     // unsupported dims
-    luaL_error(L, "<libmstsegm.infer> unsupported nb of dimensions");
+    THError("<libmstsegm.infer> unsupported nb of dimensions");
+  }
+
+  // edges ?
+  if (edges) {
+    getEdges(result);
   }
 
   // return result
   luaT_pushudata(L, result, luaT_checktypename2id(L, "torch.Tensor"));
   lua_pushnumber(L, num_ccs);
 
-  delete seg;
   return 2;
 }
 

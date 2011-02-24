@@ -223,6 +223,40 @@ static THTensor * opencv2torch_32F(IplImage *source, THTensor *dest) {
   return dest;
 }
 
+static THTensor * opencvPoints2torch_32F(CvPoint2D32f * points, int npoints, THTensor *dest) {
+
+  // Resize target
+  THTensor_resize2d(dest, npoints, 2);
+
+  // copy
+  int p;
+  for (p=0; p<npoints; p++){
+    THTensor_set2d(dest, p, 0, points[p].x);
+    THTensor_set2d(dest, p, 1, points[p].y);
+  }
+
+  // return freshly created IPL image
+  return dest;
+}
+
+static CvPoint2D32f * torch_32F2opencvPoints(THTensor *src) {
+
+  int count = src->size[0];
+  // create output
+  CvPoint2D32f * points_cv = 0;
+  points_cv = (CvPoint2D32f*)cvAlloc(count*sizeof(points_cv[0]));
+
+  // copy
+  int p;
+  for (p=0; p<count; p++){
+    points_cv[p].x = THTensor_get2d(src, p, 0);
+    points_cv[p].y = THTensor_get2d(src, p, 1);
+  }
+
+  // return freshly created IPL image
+  return points_cv;
+}
+
 //============================================================
 // Wrapper around simple OpenCV functions
 // All these functions work on the Lua stack
@@ -283,6 +317,323 @@ static int l_cvSobel (lua_State *L) {
 
   return 0;
 }
+
+//============================================================
+static int l_cvCornerHarris(lua_State *L) {
+  // Get Tensor's Info
+  THTensor * image = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * harris = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+
+  IplImage * image_ipl = torch2opencv_8U(image);
+
+  CvSize dest_size = cvSize(image->size[0], image->size[1]);
+
+  // Create ipl image
+  IplImage * harris_ipl = cvCreateImage(dest_size, IPL_DEPTH_32F, 1);
+
+  int blockSize = 5;
+  int aperture_size = 3;
+  double k = 0.04;
+
+  // User values:
+  if (lua_isnumber(L, 3)) {
+    blockSize = lua_tonumber(L, 3);
+  }
+  if (lua_isnumber(L, 4)) {
+    aperture_size = lua_tonumber(L, 4);
+  }
+  if (lua_isnumber(L, 5)) {
+    k = lua_tonumber(L, 5);
+  }
+
+  cvCornerHarris(image_ipl, harris_ipl, blockSize, aperture_size, k);
+
+  // return results
+  opencv2torch_32F(harris_ipl, harris);
+
+  // Deallocate IPL images
+  cvReleaseImage(&harris_ipl);
+  cvReleaseImage(&image_ipl);
+
+  return 0;
+}
+
+
+//============================================================
+static int l_cvGoodFeaturesToTrack(lua_State *L) {
+  // Get Tensor's Info
+  THTensor * image = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * points = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * image_out = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+  
+  CvSize dest_size = cvSize(image->size[0], image->size[1]);
+  IplImage * image_ipl = torch2opencv_8U(image);
+  IplImage * image_out_ipl = torch2opencv_8U(image_out);
+
+
+  IplImage * grey = cvCreateImage( dest_size, 8, 1 );
+
+  cvCvtColor( image_ipl, grey, CV_BGR2GRAY );
+  CvPoint2D32f* points_cv = 0;
+
+
+  IplImage* eig = cvCreateImage( dest_size, 32, 1 );
+  IplImage* temp = cvCreateImage( dest_size, 32, 1 );
+
+  int count = 500;
+  double quality = 0.01;
+  double min_distance = 10;
+  int win_size = 10;  
+
+  // User values:
+  if (lua_isnumber(L, 4)) {
+    count = lua_tonumber(L, 4);
+  }
+  if (lua_isnumber(L, 5)) {
+    quality = lua_tonumber(L, 5);
+  }
+  if (lua_isnumber(L, 6)) {
+    min_distance = lua_tonumber(L, 6);
+  }
+  if (lua_isnumber(L, 7)) {
+    win_size = lua_tonumber(L, 7);
+  }
+
+  points_cv = (CvPoint2D32f*)cvAlloc(count*sizeof(points_cv[0]));
+
+  cvGoodFeaturesToTrack( grey, eig, temp, points_cv, &count,
+			 quality, min_distance, 0, 3, 0, 0.04 );
+  
+  cvFindCornerSubPix( grey, points_cv, count,
+		      cvSize(win_size,win_size), 
+		      cvSize(-1,-1),
+		      cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS,
+				     20,0.03));
+  int i;
+  for( i = 0; i < count; i++ ) {
+    cvCircle( image_out_ipl, cvPointFrom32f(points_cv[i]), 25, 
+	      CV_RGB(0,255,0), 1, 8,0);
+  }
+  
+  // return results
+  points = opencvPoints2torch_32F(points_cv, count, points);
+  opencv2torch_8U(image_out_ipl, image_out);
+
+  // Deallocate points_cv
+  cvFree(&points_cv);
+  cvReleaseImage( &eig );
+  cvReleaseImage( &temp );
+  cvReleaseImage( &grey );
+  cvReleaseImage( &image_ipl );
+  cvReleaseImage( &image_out_ipl );
+
+  return 0;
+}
+
+//============================================================
+static int l_cvTrackPyrLK(lua_State *L) {
+  // Get Tensor's Info
+  THTensor * image1 = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * image2 = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * points1 = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * points2 = luaT_checkudata(L, 4, luaT_checktypename2id(L, "torch.Tensor"));
+  
+
+  int count = points1->size[0];
+  int win_size = 10;  
+
+  // User values:
+  if (lua_isnumber(L, 5)) {
+    win_size = lua_tonumber(L, 5);
+  }
+
+  CvSize dest_size = cvSize(image1->size[0], image1->size[1]);
+  IplImage * image1_ipl = torch2opencv_8U(image1);
+  IplImage * image2_ipl = torch2opencv_8U(image2);
+  
+
+  IplImage * grey1 = cvCreateImage( dest_size, 8, 1 );
+  IplImage * grey2 = cvCreateImage( dest_size, 8, 1 );
+
+  cvCvtColor( image1_ipl, grey1, CV_BGR2GRAY );
+  cvCvtColor( image2_ipl, grey2, CV_BGR2GRAY );
+  CvPoint2D32f* points1_cv = torch_32F2opencvPoints(points1);
+  CvPoint2D32f* points2_cv = 0;
+  points2_cv = (CvPoint2D32f*)cvAlloc(count*sizeof(points2_cv[0]));
+
+
+  // Call Lucas Kanade algorithm
+  char features_found[ count ];
+  float feature_errors[ count ];
+  CvSize pyr_sz = cvSize( image1_ipl->width+8, image1_ipl->height/3 );
+
+  IplImage* pyrA = cvCreateImage( pyr_sz, IPL_DEPTH_32F, 1 );
+  IplImage* pyrB = cvCreateImage( pyr_sz, IPL_DEPTH_32F, 1 );
+  
+  cvCalcOpticalFlowPyrLK( grey1, grey2, 
+			  pyrA, pyrB, 
+			  points1_cv, points2_cv, 
+			  count, 
+			  cvSize( win_size, win_size ), 
+			  5, features_found, feature_errors,
+			  cvTermCriteria( CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.3 ), 0 );
+  
+  // return results
+  opencvPoints2torch_32F(points2_cv, count, points2);
+  
+  // Deallocate points_cv
+  cvFree(&points1_cv);
+  cvFree(&points2_cv);
+  cvReleaseImage( &pyrA );
+  cvReleaseImage( &pyrB );
+  cvReleaseImage( &grey1 );
+  cvReleaseImage( &grey2);
+  cvReleaseImage( &image1_ipl );
+  cvReleaseImage( &image2_ipl );
+
+  return 0;
+}
+
+//============================================================
+static int l_cvCalcOpticalFlowPyrLK(lua_State *L) {
+  // Get Tensor's Info
+  THTensor * image1 = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * image2 = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * flow_x = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * flow_y = luaT_checkudata(L, 4, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * points = luaT_checkudata(L, 5, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * image_out = luaT_checkudata(L, 6, luaT_checktypename2id(L, "torch.Tensor"));
+  
+
+  int count = 500;
+  double quality = 0.01;
+  double min_distance = 10;
+  int win_size = 10;  
+
+  // User values:
+  if (lua_isnumber(L, 7)) {
+    count = lua_tonumber(L, 7);
+  }
+  if (lua_isnumber(L, 8)) {
+    quality = lua_tonumber(L, 8);
+  }
+  if (lua_isnumber(L, 9)) {
+    min_distance = lua_tonumber(L, 9);
+  }
+  if (lua_isnumber(L, 10)) {
+    win_size = lua_tonumber(L, 10);
+  }
+
+  CvSize dest_size = cvSize(image1->size[0], image1->size[1]);
+  IplImage * image1_ipl = torch2opencv_8U(image1);
+  IplImage * image2_ipl = torch2opencv_8U(image2);
+  IplImage * image_out_ipl = torch2opencv_8U(image_out);
+
+
+  IplImage * grey1 = cvCreateImage( dest_size, 8, 1 );
+  IplImage * grey2 = cvCreateImage( dest_size, 8, 1 );
+
+  cvCvtColor( image1_ipl, grey1, CV_BGR2GRAY );
+  cvCvtColor( image2_ipl, grey2, CV_BGR2GRAY );
+  CvPoint2D32f* points1_cv = 0;
+  CvPoint2D32f* points2_cv = 0;
+
+
+  IplImage* eig = cvCreateImage( dest_size, 32, 1 );
+  IplImage* temp = cvCreateImage( dest_size, 32, 1 );
+
+  // FIXME reuse points
+  points1_cv = (CvPoint2D32f*)cvAlloc(count*sizeof(points1_cv[0]));
+  points2_cv = (CvPoint2D32f*)cvAlloc(count*sizeof(points2_cv[0]));
+
+  cvGoodFeaturesToTrack( grey1, eig, temp, points1_cv, &count,
+			 quality, min_distance, 0, 3, 0, 0.04 );
+  
+  cvFindCornerSubPix( grey1, points1_cv, count,
+		      cvSize(win_size,win_size), 
+		      cvSize(-1,-1),
+		      cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS,
+				     20,0.03));
+  // Call Lucas Kanade algorithm
+  char features_found[ count ];
+  float feature_errors[ count ];
+  CvSize pyr_sz = cvSize( image1_ipl->width+8, image1_ipl->height/3 );
+
+  IplImage* pyrA = cvCreateImage( pyr_sz, IPL_DEPTH_32F, 1 );
+  IplImage* pyrB = cvCreateImage( pyr_sz, IPL_DEPTH_32F, 1 );
+  
+  cvCalcOpticalFlowPyrLK( grey1, grey2, 
+			  pyrA, pyrB, 
+			  points1_cv, points2_cv, 
+			  count, 
+			  cvSize( win_size, win_size ), 
+			  5, features_found, feature_errors,
+			  cvTermCriteria( CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.3 ), 0 );
+  // make image
+  int i;
+  for( i = 0; i < count; i++ ) {
+    if (features_found[i] >0){
+      CvPoint p0 = cvPoint( cvRound( points1_cv[i].x), 
+			    cvRound( points1_cv[i].y));
+      CvPoint p1 = cvPoint( cvRound( points2_cv[i].x), 
+			    cvRound( points2_cv[i].y));
+      cvLine( image_out_ipl, p0, p1, CV_RGB(255,0,0), 1, CV_AA, 0);
+      //create the flow vectors to be compatible with the other
+      //opticalFlows
+      if (((p1.x > 0) && (p1.x < flow_x->size[0])) &&
+	  ((p1.y > 0) && (p1.y < flow_x->size[1]))) {
+	THTensor_set2d(flow_x,p1.x,p1.y,points1_cv[i].x - points2_cv[i].x);
+	THTensor_set2d(flow_y,p1.x,p1.y,points1_cv[i].y - points2_cv[i].y);
+      }
+    }
+  }
+  
+  // return results
+  opencvPoints2torch_32F(points2_cv, count, points);
+  opencv2torch_8U(image_out_ipl, image_out);
+
+  // Deallocate points_cv
+  cvFree(&points1_cv);
+  cvFree(&points2_cv);
+  cvReleaseImage( &eig );
+  cvReleaseImage( &temp );
+  cvReleaseImage( &pyrA );
+  cvReleaseImage( &pyrB );
+  cvReleaseImage( &grey1 );
+  cvReleaseImage( &grey2);
+  cvReleaseImage( &image1_ipl );
+  cvReleaseImage( &image2_ipl );
+  cvReleaseImage( &image_out_ipl );
+
+  return 0;
+}
+
+//============================================================
+// draws red flow lines on an image (for visualizing the flow)
+static int l_cvDrawFlowlinesOnImage (lua_State *L) {
+  THTensor * points1 = luaT_checkudata(L,1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * points2 = luaT_checkudata(L,2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * image   = luaT_checkudata(L,3, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * color   = luaT_checkudata(L,4, luaT_checktypename2id(L, "torch.Tensor"));
+  IplImage * image_ipl = torch2opencv_8U(image);
+  CvScalar color_cv = CV_RGB(THTensor_get1d(color,0),
+			     THTensor_get1d(color,1),
+			     THTensor_get1d(color,2));
+  int count = points1->size[0];
+  int i;
+  for( i = 0; i < count; i++ ) {
+    CvPoint p0 = cvPoint( cvRound( THTensor_get2d(points1,i,0)),
+			  cvRound( THTensor_get2d(points1,i,1)));
+    CvPoint p1 = cvPoint( cvRound( THTensor_get2d(points2,i,0)),
+			  cvRound( THTensor_get2d(points2,i,1)));
+    cvLine( image_ipl, p0, p1, color_cv, 1, CV_AA, 0);
+  }
+  // return results
+  opencv2torch_8U(image_ipl, image);
+  cvReleaseImage( &image_ipl );
+  return 0;
+}
+
 
 //============================================================
 // OpticalFlow
@@ -601,7 +952,13 @@ static const struct luaL_reg opencv [] = {
   {"releaseCam", l_cvReleaseCAM},
   {"calcOpticalFlow", l_cvCalcOpticalFlow},
   {"haarDetectObjects", l_cvHaarDetectObjects},
+  {"CornerHarris", l_cvCornerHarris},
+  {"GoodFeaturesToTrack", l_cvGoodFeaturesToTrack},
+  {"TrackPyrLK", l_cvTrackPyrLK},
+  {"calcOpticalFlowPyrLK", l_cvCalcOpticalFlowPyrLK},
+  {"drawFlowlinesOnImage", l_cvDrawFlowlinesOnImage},
   {NULL, NULL}  /* sentinel */
+  //  {"HoG", l_cvhog},
 };
 
 int luaopen_libopencv (lua_State *L) {

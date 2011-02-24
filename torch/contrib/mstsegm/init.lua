@@ -49,31 +49,36 @@ if not mstsegmLoaded then
    -- register functions
    mstsegm.infer 
       = function(...)
-           local args, img, sigma, k, min, dt, connex = toolBox.unpack(
+           local args, img, sigma, k, min, dt, connex, incr, 
+           benincr, incr_rst, edges = toolBox.unpack(
               {...},
               'mstsegm.infer', infer_help_desc,
               {arg='image', type='torch.Tensor', help='input image (WxHxN or WxHxNxZ tensor)', req=true},
               {arg='sigma', type='number', help='gaussian for preprocessing', default=0.8},
               {arg='k', type='number', help='thresholding parameter, a large k enforces larger segmentation areas', default=500},
               {arg='min', type='number', help='min parameter', default=20},
-	      {arg='disttype', type='string', help='distance metric to use', default='euclid'},
-              {arg='connex', type='string', help='connectivity (volumes only)', default='full'}
+              {arg='disttype', type='string', help='distance metric to use', default='euclid'},
+              {arg='connex', type='number', help='connectivity (4 or 8, edges per vertex)', default=8},
+              {arg='incremental', type='boolean', help='incremental mode', default=false},
+              {arg='benincremental', type='boolean', help='incremental mode', default=false},
+              {arg='reset', type='boolean', help='incremental only: reset universe', default=false},
+              {arg='edges', type='boolean', help='returns edges rather than colors', default=false}
            )
            if img:nDimension() ~= 3 and img:nDimension() ~= 4 then
               error(args.usage)
            end
-	   local dtn = 0
-	   if dt ~= 'euclid' then
-	      dtn = 1
-	   end
-           if connex == 'min' then
-              connex = 0
-           elseif connex == 'full' then
-              connex = 1
-           else
+           local dtn = 0
+           if dt ~= 'euclid' then
+              dtn = 1
+           end
+           if connex ~= 4 and connex ~= 8 and type(connex) ~= 'string' 
+              and not connex:find('rad-') then
               error(args.usage)
            end
-           return libmstsegm.infer(img, sigma, k, min, dtn, connex)
+           if type(connex) == 'string' then
+              connex = 100 + connex:sub(5,10)
+           end
+           return libmstsegm.infer(img, sigma, k, min, dtn, connex, incr, incr_rst, benincr, edges)
         end
 
    mstsegm.testme

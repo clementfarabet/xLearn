@@ -20,10 +20,11 @@ gaussian = image.gaussian{width=9}
 mod = nn.LocalNorm(gaussian, 8)
 result = mod:forward(stimulus)]]
 
-function LocalNorm:__init(ker,nf) -- kernel for weighted mean | nb of features
+function LocalNorm:__init(ker,nf,thres) -- kernel for weighted mean | nb of features
    parent.__init(self)
    self.kernel = ker
    self.nfeatures = nf
+   self.fixedThres = thres -- optional, if not provided, the global std is used
 
    if not ker or not nf or type(ker) ~= 'userdata' then
       error(toolBox.usage('nn.LocalNorm',
@@ -152,8 +153,8 @@ function LocalNorm:forward(input)
    -- koray's way
    -- btw need to set this to a constant in order to pass jacobian test
    local meanstd = self.inStdDev:mean()
-   self.thresMod.threshold = math.max(meanstd,1e-3)
-   self.thresMod.val = math.max(meanstd,1e-3)
+   self.thresMod.threshold = self.fixedThres or math.max(meanstd,1e-3)
+   self.thresMod.val = self.fixedThres or math.max(meanstd,1e-3)
    self.stdDev = self.thresMod:forward(self.inStdDev)
    -- my way
    -- local epsilon = math.max(1e-8,self.inStdDev:mean()/8 - 1e-6)

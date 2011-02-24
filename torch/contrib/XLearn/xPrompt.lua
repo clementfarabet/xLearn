@@ -19,15 +19,22 @@ c = nil
 -- overwrite print function to expand tables
 --
 lua_print = print
-print = function(obj)
+print = function(obj,...)
            if type(obj) == 'table' then
               local mt = getmetatable(obj)
               if mt and mt.__tostring__ then
                  lua_print(mt.__tostring__(obj))
               else
                  local tos = tostring(obj)
+                 local obj_w_usage = false
                  if tos and not string.find(tos,'table: ') then
-                    io.write(tos .. ':\n')
+                    if obj.usage then
+                       io.write(obj.usage)
+                       io.write('\n\nFIELDS:\n')
+                       obj_w_usage = true
+                    else
+                       io.write(tos .. ':\n')
+                    end
                  end
                  io.write('{')
                  local tab = ''
@@ -39,7 +46,7 @@ print = function(obj)
                     else
                        local tostr = tostring(v):gsub('\n','\\n')
                        if #tostr>40 then
-                          local tostrshort = tostr:sub(1,40)
+                          local tostrshort = tostr:sub(1,40) .. toolBox.COLORS.none
                           io.write(tab .. '[' .. k .. ']' .. ' = ' .. tostrshort .. ' ... ')
                        else
                           io.write(tab .. '[' .. k .. ']' .. ' = ' .. tostr)
@@ -49,9 +56,17 @@ print = function(obj)
                     idx = idx + 1
                  end
                  lua_print('}')
+                 if obj_w_usage then
+                    lua_print('')                    
+                 end
               end
            else 
               lua_print(obj) 
+           end
+           local others = {...}
+           for i = 1,select('#',...) do
+              print('--')
+              print(others[i])
            end
         end
 

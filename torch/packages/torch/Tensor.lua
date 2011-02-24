@@ -1,6 +1,9 @@
 -- print mode:
 torch.printStyle = 'memory'
 
+-- max size (to avoid lenghty printouts)
+torch.printMax = 50
+
 -- tostring() functions for Tensor and Storage
 local function Storage__printformat(self)
    local intMode = true
@@ -64,7 +67,7 @@ local function Storage__printformat(self)
 end
 
 local function Storage__tostring(self)
-   local str = ''
+   local str = '\n'
    local format,scale = Storage__printformat(self)
    if scale then
       str = str .. string.format('%g', scale) .. ' *\n'
@@ -104,9 +107,17 @@ local function Tensor__printMatrix(self, indent)
          str = str .. '['
          for i = 1,self:size(1) do
             str = str .. string.format(format, self:select(2,j)[i]/scale)
+            if i == torch.printMax then
+               str = str .. ' ...'
+               break
+            end
             if i ~= self:size(1) then
                str = str .. ' '
             end
+         end
+         if j == torch.printMax then
+            str = str .. ']\n' .. indent .. ' ... ]\n'
+            break
          end
          if j == self:size(2) then
             str = str .. ']]\n'
@@ -119,9 +130,17 @@ local function Tensor__printMatrix(self, indent)
          str = str .. '['
          for i = 1,self:size(2) do
             str = str .. string.format(format, self:select(1,j)[i]/scale)
+            if i == torch.printMax then
+               str = str .. ' ...'
+               break
+            end
             if i ~= self:size(2) then
                str = str .. ' '
             end
+         end
+         if j == torch.printMax then
+            str = str .. ']\n' .. indent .. ' ... ]\n'
+            break
          end
          if j == self:size(1) then
             str = str .. ']]\n'

@@ -10,6 +10,10 @@ require 'os'
 op = OptionParser('%prog -s SOURCE [options]')
 op:add_option{'-s', '--source', action='store', dest='source', 
               help='image source, can be one of: camera | lena'}
+op:add_option{'-c', '--camera', action='store', dest='camidx', 
+              help='if source=camera, you can specify the camera index: /dev/videoIDX [default=0]'}
+op:add_option{'-p', '--path', action='store', dest='path', 
+              help='path to video'}
 options,args = op:parse_args()
 
 -- setup QT gui
@@ -18,8 +22,10 @@ widget = qtuiloader.load('face-detect.ui')
 painter = qt.QtLuaPainter(widget.frame)
 
 -- video source
-if not options.source then options.source = 'camera' end
-source = nn.ImageSource(options.source)
+local source = nn.ImageSource{type = options.source or 'camera', 
+                              path = options.path,
+                              cam_idx = options.camidx,
+                              fps = 20}
 
 -- retrieve trained network
 convnet = nn.Sequential()

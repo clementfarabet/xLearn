@@ -87,7 +87,6 @@ function Interface:printToEthernet(str)
    -- (4) make sure it's started
    self:ethernetBlockOnIdle()
 end
-
 function Interface:streamToHost(stream, tag, mode)
    -- verif data size >= 64
    local data_size = stream.w * stream.h * 2
@@ -131,7 +130,6 @@ function Interface:streamToHost(stream, tag, mode)
    
    -- (2) open the streamer port for readout
    self.core:openPortRd(1, stream)
-   
    -- (3) stream packets of self.max_packet_size bytes max
    if (nb_packets > 0) then
       self.core:setreg( oFlower.reg_B, nb_packets)
@@ -147,7 +145,7 @@ function Interface:streamToHost(stream, tag, mode)
                                arg32_1 = math.ceil(packet_size / 4)}
       -- (a) verify that ethernet module is not busy (status bit 0)
       self:ethernetBlockOnBusy()
-    -- (c) initialize transfer, by specifying length
+      -- (c) initialize transfer, by specifying length
       self:ethernetStartTransfer(packet_size)
       -- (d) wait for transfer started
       self:ethernetBlockOnIdle()
@@ -217,6 +215,174 @@ function Interface:streamToHost(stream, tag, mode)
    elseif mode ~= 'no-ack' then
       error('ERROR <Interface> : mode can be one of: with-ack | no-ack')
    end
+end
+
+
+function Interface:streamToHost_ack(stream, tag, mode)
+   -- verif data size >= 64
+   local data_size = stream.w * stream.h * 2
+   if (data_size < 64) then
+      error('# ERROR <Interface> : cant stream data packets smaller than 64 bytes')
+   end
+
+   -- estimate number of eth packets
+   local nb_packets = math.ceil(data_size / self.max_packet_size)
+   
+   -- debug
+   if (self.msg_level ~= 'none') then
+      self.core:message(string.format('eth: sending %0d packets [tag = %s]', nb_packets, tag))
+   end
+
+   -- (1) specify: name | size | nb_packets
+   self:printToEthernet(string.format('TX | %s | %0d | %0d', tag, data_size, nb_packets))
+   
+   -- (1) a sleep ?
+   if data_size < 30*30*2 then
+      self.core:sleep(50e-6)
+   end
+ 
+   local last_packet = 0
+   if (data_size % self.max_packet_size ~= 0) then
+      nb_packets = nb_packets - 1
+      last_packet = data_size % self.max_packet_size
+   end
+   
+   if (last_packet%4 ~= 0) then
+      stream.w = stream.w + stream.orig_w
+      stream.orig_h = stream.orig_h + 1
+      data_size = stream.w * stream.h * 2
+      nb_packets = math.ceil(data_size / self.max_packet_size)
+      last_packet = 0
+      if (data_size % self.max_packet_size ~= 0) then
+         nb_packets = nb_packets - 1
+         last_packet = data_size % self.max_packet_size
+      end
+   end 
+   
+   -- (2) open the streamer port for readout
+   self.core:openPortRd(1, stream)
+   local count = 1
+   -- (3) stream packets of self.max_packet_size bytes max
+   if (nb_packets > 0) then
+      self.core:setreg( oFlower.reg_B, nb_packets)
+      local stay_in_loop = self.core:processAddress()
+      
+      local packet_size = self.max_packet_size
+      
+      -- (b) 
+      self.core:addInstruction{opcode = oFlower.op_routeStream,
+                               arg8_1 = oFlower.io_dma,
+                               arg8_2 = oFlower.io_ethernet,
+                               arg8_3 = oFlower.type_uint32,
+                               arg32_1 = math.ceil(packet_size / 4)}
+      -- (a) verify that ethernet module is not busy (status bit 0)
+      self:ethernetBlockOnBusy()
+      -- (c) initialize transfer, by specifying length
+      self:ethernetStartTransfer(packet_size)
+      -- (d) wait for transfer started
+      self:ethernetBlockOnIdle()
+
+      
+      if (not mode) or (mode and mode == 'with-ack') then
+	 -- (5) get ack
+	 -- (b) wait for a packet
+	 self:ethernetBlockOnBusy()
+	 self:ethernetWaitForPacket()
+	 self.core:addInstruction{opcode = oFlower.op_routeStream,
+				  arg8_1 = oFlower.io_ethernet,
+				  arg8_2 = oFlower.io_uart_status, -- /dev/null
+				  arg8_3 = oFlower.type_uint32,
+				  arg32_1 = 16}
+	 --self:ethernetBlockOnIdle()
+      elseif mode ~= 'no-ack' then
+	 error('ERROR <Interface> : mode can be one of: with-ack | no-ack')
+      end 
+      
+      self.core:addi(oFlower.reg_B, -1, oFlower.reg_B)
+      self.core:gotoAbsoluteIfNonZero(stay_in_loop, oFlower.reg_B)
+      count = count + 1
+   end
+   
+   if(last_packet ~= 0) then
+      packet_size = last_packet
+      
+      if (math.floor(packet_size/4)*4 ~= packet_size) then
+         error('# ERROR <Interface> : eth frame not fit for the DMA [this needs to be fixed]')
+      end 
+      
+      -- (b) 
+      self.core:addInstruction{opcode = oFlower.op_routeStream,
+                               arg8_1 = oFlower.io_dma,
+                               arg8_2 = oFlower.io_ethernet,
+                               arg8_3 = oFlower.type_uint32,
+                               arg32_1 = math.ceil(packet_size / 4)}
+      
+      -- ()
+      if (packet_size < 64) then 
+         local to_pad = 64 - packet_size
+         -- (2) write data to buffer
+         self.core:addInstruction{opcode = oFlower.op_writeStream, 
+                                  arg8_1 = oFlower.io_ethernet,
+                                  arg8_3 = oFlower.type_uint32,
+                                  arg32_1 = math.ceil((to_pad) / 4)}
+         -- (2 bis) append padding:
+         for i=1,to_pad do
+            self.core:addDataUINT8(0)
+         end
+         if (math.ceil((to_pad) / 4) == 1) then 
+            self.core:addDataUINT8(0)
+         end
+         self.core:addDataPAD()
+	 --print('added', math.ceil((to_pad) / 4))
+         packet_size = 64
+      end
+      
+      -- (a) verify that ethernet module is not busy (status bit 0)
+      self:ethernetBlockOnBusy()
+      
+      -- (c) initialize transfer, by specifying length
+      self:ethernetStartTransfer(packet_size)
+      -- (d) wait for transfer started
+      self:ethernetBlockOnIdle()
+
+
+      if (not mode) or (mode and mode == 'with-ack') then
+	 -- (5) get ack
+	 -- (b) wait for a packet
+	 self:ethernetBlockOnBusy()
+	 self:ethernetWaitForPacket()
+	 self.core:addInstruction{opcode = oFlower.op_routeStream,
+				  arg8_1 = oFlower.io_ethernet,
+				  arg8_2 = oFlower.io_uart_status, -- /dev/null
+				  arg8_3 = oFlower.type_uint32,
+				  arg32_1 = 16}
+	 --self:ethernetBlockOnIdle()
+      elseif mode ~= 'no-ack' then
+	 error('ERROR <Interface> : mode can be one of: with-ack | no-ack')
+      end 
+
+      
+   end
+   
+   -- () wait for transfer complete
+   --self:ethernetBlockOnBusy()
+   
+   -- (4) close port
+   self.core:closePort(1)
+   
+   -- if (not mode) or (mode and mode == 'with-ack') then
+--       print('here')
+--       -- (5) get ack
+--       -- (b) wait for a packet
+--       self:ethernetWaitForPacket()
+--       self.core:addInstruction{opcode = oFlower.op_routeStream,
+--                                arg8_1 = oFlower.io_ethernet,
+--                                arg8_2 = oFlower.io_uart_status, -- /dev/null
+--                                arg8_3 = oFlower.type_uint32,
+--                                arg32_1 = 16}
+--    elseif mode ~= 'no-ack' then
+--       error('ERROR <Interface> : mode can be one of: with-ack | no-ack')
+--    end
 end
 
 function Interface:streamFromHost_legacy(stream, tag)
@@ -381,6 +547,111 @@ function Interface:loopBack(size)
    -- (c) trigger the sending
    self:ethernetStartTransfer(size)
 end
+
+
+
+
+
+
+
+
+function Interface:streamFromHost_ack(stream, tag)
+   -- verif data size >= 64
+   local data_size = stream.w * stream.h * 2
+   if (data_size < 64) then
+      error('# ERROR <Interface> : cant stream data packets smaller than 64 bytes')
+   end
+   
+   -- estimate number of eth packets
+   local nb_packets = math.ceil(data_size / self.max_packet_size)
+   
+   -- debug
+   if (self.msg_level ~= 'none') then
+      self.core:message(string.format('eth: requesting %0d packets [tag = %s]', nb_packets, tag))
+   end
+   
+   -- (1) specify: name | size | nb_packets
+   self:printToEthernet(string.format('RX | %s | %0d | %0d', tag, data_size, nb_packets))
+   
+   local last_packet = 0
+   if (data_size % self.max_packet_size ~= 0) then
+      nb_packets = nb_packets - 1
+      last_packet = data_size % self.max_packet_size
+   end
+   
+   -- (2) open the streamer port for readout
+   self.core:openPortWr(1, stream)
+   
+
+    -- (3) request packets of self.max_packet_size bytes max
+   if (nb_packets > 0) then
+      self.core:setreg( oFlower.reg_B, nb_packets)
+      local stay_in_loop = self.core:processAddress()
+      local packet_size = self.max_packet_size
+      
+      -- (a) request a particular nb of bytes from the host
+      self:printToEthernet(string.format('REQ | %0d', packet_size))
+      
+      
+      -- (c) receive data
+      self.core:addInstruction{opcode = oFlower.op_routeStream,
+                               arg8_1 = oFlower.io_ethernet,
+                               arg8_2 = oFlower.io_dma,
+                               arg8_3 = oFlower.type_uint32,
+                               arg32_1 = math.ceil(packet_size / 4)}
+      if (self.msg_level == 'concise') then
+	 self.core:messagebody('.')
+      end
+      -- (d) loopback
+      self.core:addi(oFlower.reg_B, -1, oFlower.reg_B)
+      self.core:gotoAbsoluteIfNonZero(stay_in_loop, oFlower.reg_B)
+   end
+
+
+
+   -- (3) receive data
+   -- self.core:addInstruction{opcode = oFlower.op_routeStream,
+--                             arg8_1 = oFlower.io_ethernet,
+--                             arg8_2 = oFlower.io_dma,
+--                             arg8_3 = oFlower.type_uint32,
+--                             arg32_1 = nb_packets*math.ceil(self.max_packet_size / 4)}
+   if (self.msg_level == 'concise') then
+      self.core:messagebody('.')
+   end
+   
+   -- (3bis) last packet ?
+   if(last_packet ~= 0) then
+
+      self:printToEthernet(string.format('REQ | %0d', last_packet))
+
+      -- (a) receive data
+      self.core:addInstruction{opcode = oFlower.op_routeStream,
+                               arg8_1 = oFlower.io_ethernet,
+                               arg8_2 = oFlower.io_dma,
+                               arg8_3 = oFlower.type_uint32,
+                               arg32_1 = math.ceil(last_packet / 4)}
+      -- (b) clean leftovers
+      if last_packet < 64 then
+	 self.core:addInstruction{opcode = oFlower.op_routeStream,
+                                  arg8_1 = oFlower.io_ethernet,
+                                  arg8_2 = oFlower.io_uart_status,
+                                  arg8_3 = oFlower.type_uint32,
+                                  arg32_1 = 16-math.ceil(last_packet / 4)}
+      end	      
+   end
+   
+   -- (4) close port
+   self.core:closePort(1)
+  
+end
+
+
+
+
+
+
+
+
 
 function Interface:loadByteCode()
    -- Creating a stream

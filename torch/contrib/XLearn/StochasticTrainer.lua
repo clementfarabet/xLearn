@@ -43,7 +43,8 @@ function StochasticTrainer:train(dataset)
          local input = sample[1]
          local target = sample[2]
          if self.maxTarget then
-            _,target = lab.max(target[1][1])
+            target = torch.Tensor(target:nElement()):copy(target)
+            _,target = lab.max(target)
             target = target[1]
          end
 
@@ -110,7 +111,8 @@ function StochasticTrainer:test(dataset)
       local input = sample[1]
       local target = sample[2]
       if self.maxTarget then
-         _,target = lab.max(target[1][1])
+         target = torch.Tensor(target:nElement()):copy(target)
+         _,target = lab.max(target)
          target = target[1]
       end
       if self.preprocessor then input = self.preprocessor:forward(input) end

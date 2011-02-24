@@ -14,9 +14,8 @@ do
    --
    function vid:__init(...)
       -- usage
-      local args, path, w, h, fps, length, channel, loaded, fmt = toolBox.unpack(
-         {...},
-         'video.loadVideo',
+      toolBox.unpack_class(
+         self, {...}, 'Video',
          'loads a video into a table of tensors:\n'
             .. ' + relies on ffpmeg, which must be installed\n'
             .. ' + creates a local scratch/ to hold jpegs',
@@ -27,7 +26,8 @@ do
          {arg='length', type='number', help='length, in seconds', default=5},
          {arg='channel', type='number', help='video channel', default=0},
          {arg='load', type='boolean', help='loads frames after conversion', default=true},
-         {arg='encoding', type='string', help='format of dumped frames', default='jpg'}
+         {arg='encoding', type='string', help='format of dumped frames', default='jpg'},
+         {arg='tensor', type='torch.Tensor', help='provide a packed tensor (WxHxCxN or WxHxN), that bypasses path'}
       )
 
       -- check ffmpeg existence
@@ -37,16 +37,33 @@ do
          error(c.Red .. 'ffmpeg required, please install it (apt-get install ffmpeg)' .. c.none)
       end
 
-      -- record meta params
-      self.path = path
-      self.w = w
-      self.h = h
-      self.fps = fps
-      self.length = length
-      self.loaded = loaded
-      self.fmt = fmt
+      -- is data provided ?
+      if self.tensor then
+         local outer = self.tensor:nDimension()
+         self.nframes = self.tensor:size(outer)
+         self[1] = {}
+         for i = 1,self.nframes do
+            table.insert(self[1], self.tensor:select(outer,i))
+         end
+         self.path = 'tensor-'..random.random()
+         self.width = self.tensor:size(1)
+         self.height = self.tensor:size(2)
+         self.load = true
+         return
+      else
+         -- auto correct width/height
+         local width = math.floor(self.width/2)*2
+         local height = math.floor(self.height/2)*2
+         if width ~= self.width or height ~= self.height then
+            self.width = width
+            self.height = height
+            print('WARNING: geometry has been changed to accomodate ffmpeg [' 
+                  ..width.. 'x' ..height.. ']')
+         end
+      end
 
       -- load channel(s)
+      local channel = self.channel
       if type(channel) ~= 'table' then channel = {channel} end
       for i = 1,#channel do
          self[i] = {}
@@ -55,7 +72,7 @@ do
       end
 
       -- cleanup disk
-      if loaded and self.path then
+      if self.load and self.path then
          self:clear()
       end
    end
@@ -64,12 +81,21 @@ do
    function vid:mktemppath(c)
       local sdirname = paths.basename(self.path) .. '_' .. 
       self.fps .. 'fps_' .. 
-      self.w .. 'x' .. self.h .. '_' .. 
+      self.width .. 'x' .. self.height .. '_' .. 
       self.length .. 's_c' .. 
-      c .. '_' .. self.fmt 
+      c .. '_' .. self.encoding 
 
       local path_cache = paths.concat('scratch',sdirname)
       return path_cache
+   end
+
+   -- return the string format of dumped files
+   function vid:getformat(c)
+      if not self[c].path then 
+         self[c].path = self:mktemppath(c)
+      end
+      os.execute('mkdir -p ' .. self[c].path)
+      return paths.concat(self[c].path ,vid_format .. 'png')
    end
 
    ----------------------------------------------------------------------
@@ -79,7 +105,7 @@ do
    function vid:loadChannel(channel, where)
       where.path = self:mktemppath(channel)
       -- file name format
-      where.sformat = vid_format .. self.fmt
+      where.sformat = vid_format .. self.encoding
       
       -- Only make cache dir and process video, if dir does not exist
       -- or if the source file is newer than the cache.  Could have
@@ -97,9 +123,10 @@ do
 	       ' -r ' .. self.fps .. 
 	       ' -t ' .. self.length ..
 	       ' -map 0.' .. channel ..
-	       ' -s ' .. self.w .. 'x' .. self.h .. 
+	       ' -s ' .. self.width .. 'x' .. self.height .. 
 	       ' -qscale 1' ..
-	       ' ' .. paths.concat(where.path, where.sformat)
+	       ' ' .. paths.concat(where.path, where.sformat) ..
+            ' 2> /dev/null'
 	    print(ffmpeg_cmd)
 	    os.execute(ffmpeg_cmd)
 	 end
@@ -112,7 +139,7 @@ do
       for file in paths.files(where.path) do
          if file ~= '.' and file ~= '..' then
             local fname = paths.concat(where.path,string.format(where.sformat,idx))
-            if not self.loaded then
+            if not self.load then
                table.insert(where, fname)
             else
                table.insert(where, image.load(fname))
@@ -130,10 +157,10 @@ do
    -- get_frame
    -- as there are two ways to store, you can't index self[1] directly
    function vid:get_frame(c,i)
-      if self.loaded then
+      if self.load then
 	 return self[c][i]
       else 
-	 if self.fmt == 'png' then 
+	 if self.encoding == 'png' then 
 	    -- png is loaded in RGBA
 	    return image.load(self[c][i]):narrow(3,1,3)
 	 else
@@ -172,18 +199,48 @@ do
 
 
    ----------------------------------------------------------------------
+   -- totensor
+   -- exports video content to 4D tensor
+   function vid:totensor(...)
+      local args, channel, offset, nframes = toolBox.unpack(
+         {...},
+         'video:totensor',
+         'exports frames to a 4D tensor',
+         {arg='channel', type='number', help='channel to export', default=1},
+         {arg='offset', type='number', help='offset to start from', default=1},
+         {arg='nframes', type='number', help='number of frames to export [default = MAX]'}
+      )
+      nframes = nframes or self.nframes
+      local sequence = self[channel]
+      local tensor
+      if sequence[1]:nDimension() == 3 then
+         tensor = torch.Tensor(sequence[1]:size(1),sequence[1]:size(2),
+                               sequence[1]:size(3),nframes)
+      else
+         tensor = torch.Tensor(sequence[1]:size(1),sequence[1]:size(2),1,nframes)
+      end
+      for i = 1,nframes do
+         tensor:select(4,i):copy(sequence[offset+i-1])
+         if (offset+i-1) == self.nframes then break end
+      end
+      return tensor
+   end
+
+
+   ----------------------------------------------------------------------
    -- save()
    -- save the video with all the channels into AVI format
    --
    function vid:save(...)
       -- usage
-      local args, outpath = toolBox.unpack(
+      local args, outpath, keep = toolBox.unpack(
          {...},
-         'video.saveVideo',
+         'video:saveVideo',
          'save all the frames into a video file:\n'
-            .. ' + video must have been loaded with video.loadVideo()\n'
+            .. ' + video must have been loaded with video:loadVideo()\n'
             .. ' + or else, it must be a list of tensors',
-         {arg='outpath', type='string', help='path to save the video', default=''}
+         {arg='outpath', type='string', help='path to save the video', default=''},
+         {arg='keep', type='boolean', help='flag to keep the dump images', default=false}
       )
       -- check outpath
       if outpath == '' then
@@ -191,20 +248,20 @@ do
          error(c.Red .. 'You must provide a path to save the video' .. c.none)
       end
 
-      local format = vid_format .. self.fmt
+      local format = vid_format .. self.encoding
       local nchannels = #self
 
       -- dump png if content is in ram
-      if self.loaded then
+      if self.load then
          print('Dumping Frames into Disk...')
          local nchannels = #self
          for c = 1,nchannels do
             -- set the channel path if needed
-            local fmt = self.fmt
-            self.fmt = 'png'
+            local fmt = self.encoding
+            self.encoding = 'png'
             self[c].path = self:mktemppath(c-1)
             format = vid_format .. 'png'
-            self.fmt = fmt
+            self.encoding = fmt
             -- remove if dir exists
             if paths.dirp(self[c].path) then
                os.execute('rm -rf ' .. self[c].path)
@@ -217,6 +274,7 @@ do
             end
          end
       end
+
       -- warning: -r must come before -i
       local ffmpeg_cmd =  ('ffmpeg -r ' .. self.fps)
       for c = 1,nchannels do
@@ -228,18 +286,20 @@ do
          ffmpeg_cmd = (ffmpeg_cmd ..
                        '  -vcodec mjpeg -qscale 1 -an  -newvideo')
       end
+      ffmpeg_cmd = ffmpeg_cmd .. ' 2> /dev/null'
 
       -- overwrite the file
       if paths.filep(outpath .. '.avi') then
          print('WARNING: ' .. outpath .. '.avi exist and will be overwritten...')
          os.execute('rm -rf ' .. outpath .. '.avi')
       end
-         
+
+      -- do it
       print(ffmpeg_cmd)
       os.execute(ffmpeg_cmd)
 
       -- cleanup disk
-      if self.loaded then
+      if self.load and (not keep) then
          self:clear()
       end
    end
@@ -253,9 +313,9 @@ do
       -- usage
       local args, zoom, loop, fps, channel = toolBox.unpack(
          {...},
-         'video.playVideo',
+         'video:playVideo',
          'plays a video:\n'
-            .. ' + video must have been loaded with video.loadVideo()\n'
+            .. ' + video must have been loaded with video:loadVideo()\n'
             .. ' + or else, it must be a list of tensors',
          {arg='zoom', type='number', help='zoom', default=1},
          {arg='loop', type='boolean', help='loop', default=false},
@@ -263,20 +323,117 @@ do
          {arg='channel', type='number', help='video channel', default=1}
       )
 
+      -- timer for display
+      local timer = qt.QTimer()
+      timer.singleShot = false
+
+      -- video index
+      local step = false
+      local i = 1
+
+      -- qt window plus keyboard handler
+      local p =  qtwidget.newwindow(self.width*zoom,self.height*zoom)
+      local paused = false
+      local keyb = 0
+      local ctrl = false
+      qt.connect(p.listener,
+                 'sigMousePress(int,int,QByteArray,QByteArray,QByteArray)',
+                 function (...) 
+                    paused = not paused
+                 end)
+      qt.connect(p.listener,
+                 'sigKeyPress(QString,QByteArray,QByteArray)',
+                 function (str, s2)
+                    if s2 and s2 == 'Key_Control' then
+                       ctrl = true
+                    elseif s2 and s2 == 'Key_W' and ctrl then
+                       p:close()
+                       timer:stop()
+                    elseif s2 and s2 == 'Key_L' then
+                       keyb = (keyb + 1) % 2
+                       if keyb == 1 or toolBox.OS ~= 'macos' then
+                          if loop then
+                             print('<Video:play> looping - off')
+                             loop = false
+                          else
+                             print('<Video:play> looping - on')
+                             loop = true
+                          end
+                       end
+                    elseif s2 and s2 == 'Key_Space' then
+                       keyb = (keyb + 1) % 2
+                       if keyb == 1 or toolBox.OS ~= 'macos' then
+                          paused = not paused
+                       end
+                    elseif s2 and s2 == 'Key_Right' then
+                       keyb = (keyb + 1) % 2
+                       if keyb == 1 or toolBox.OS ~= 'macos' then
+                          paused = true
+                          i = i + 1
+                          step = true
+                       end
+                    elseif s2 and s2 == 'Key_Left' then
+                       keyb = (keyb + 1) % 2
+                       if keyb == 1 or toolBox.OS ~= 'macos' then
+                          paused = true
+                          i = i - 1
+                          step = true
+                       end
+                    else
+                       ctrl = false
+                    end
+                 end)
+
       -- plays vid
-      local p =  qtwidget.newwindow(self.w*zoom,self.h*zoom)
       local disp = Displayer()
       local frame = torch.Tensor()
-      local pause = 1 / (fps or self.fps) - 0.03
-      while true do
-         for i,frame in ipairs(self[channel]) do
-            if not self.loaded then frame = image.load(frame) end
-            disp:show{tensor=frame,painter=p,legend='playing sequence',zoom=zoom}
-            if pause and pause>0 then libxlearn.usleep(pause*1e6) end
-            collectgarbage()
-         end
-         if not loop then break end
+      local pause = 1 / (fps or self.fps)
+
+      -- disp frame function
+      local function dispFrame(i)
+         local frame = self[channel][i]
+         if not self.load then frame = image.load(frame) end
+         disp:show{tensor=frame,painter=p,legend='playing sequence',zoom=zoom}
+         collectgarbage()
       end
+
+      -- timer handler
+      timer.interval = pause*1e3
+      qt.connect(timer,
+                 'timeout()',
+                 function()
+                    if not paused then
+                       dispFrame(i)
+                       if i < #self[channel] then
+                          i = i + 1
+                       elseif loop then
+                          i = 1
+                       else
+                          i = 1
+                          paused = true
+                       end
+                    elseif step then
+                       step = false
+                       if i > #self[channel] then
+                          if loop then
+                             i = 1
+                          else
+                             i = #self[channel]
+                          end
+                       elseif i < 1 then
+                          if loop then
+                             i = #self[channel]
+                          else
+                             i = 1
+                          end
+                       end
+                       dispFrame(i)
+                    end
+                 end)
+      timer:start()
+
+      -- Msg
+      print('<Video:play> started - [space] to pause/resume/restart, [L] to loop, [right,left] to step')
    end
 
 
@@ -288,46 +445,98 @@ do
       -- usage
       local _, zoom, loop, fps = toolBox.unpack(
          {...},
-         'video.playVideo3D',
+         'video:playVideo3D',
          'plays a video:\n'
-            .. ' + video must have been loaded with video.loadVideo()\n'
+            .. ' + video must have been loaded with video:loadVideo()\n'
             .. ' + or else, it must be a list of pairs of tensors',
          {arg='zoom', type='number', help='zoom', default=1},
          {arg='loop', type='boolean', help='loop', default=false},
          {arg='fps', type='number', help='fps [default = given by seq.fps]'}
       )
 
+      -- timer for display
+      local timer = qt.QTimer()
+      timer.singleShot = false
+
+      -- qt window plus keyboard handler
+      local p =  qtwidget.newwindow(self.width*zoom,self.height*zoom)
+      local paused = false
+      local keyb = 0
+      local ctrl = false
+      qt.connect(p.listener,
+                 'sigMousePress(int,int,QByteArray,QByteArray,QByteArray)',
+                 function (...) 
+                    paused = not paused
+                 end)
+      qt.connect(p.listener,
+                 'sigKeyPress(QString,QByteArray,QByteArray)',
+                 function (str, s2)
+                    if s2 and s2 == 'Key_Control' then
+                       ctrl = true
+                    elseif s2 and s2 == 'Key_W' and ctrl then
+                       p:close()
+                       timer:stop()
+                    elseif s2 and s2 == 'Key_Space' then
+                       keyb = (keyb + 1) % 2
+                       if keyb == 1 then
+                          paused = not paused
+                       end
+                    else
+                       ctrl = false
+                    end
+                 end)
+
       -- plays vid
-      local p =  qtwidget.newwindow(self.w*zoom,self.h*zoom)
       local disp = Displayer()
-      local framel
-      local framer
       local frame = torch.Tensor()
-      local pause = 1 / (fps or self.fps) - 0.08
-      while true do
-         for i = 1,#self[1] do
-            -- left/right
-            framel = self[1][i]
-            framer = self[2][i]
-            -- optional load
-            if not self.loaded then 
-               framel = image.load(framel)
-               framer = image.load(framer)
-            end
-            -- merged
-            frame:resize(framel:size(1),framel:size(2),3)
-            frame:select(3,1):copy(framel:select(3,1))
-            frame:select(3,2):copy(framer:select(3,1))
-            frame:select(3,3):copy(framer:select(3,1))
-            -- disp
-            disp:show{tensor=frame,
-                      painter=p,
-                      legend='playing 3D sequence [left=RED, right=CYAN]',
-                      zoom=zoom}
-            if pause and pause>0 then libxlearn.usleep(pause*1e6) end
+      local pause = 1 / (fps or self.fps)
+
+      -- disp frame function
+      local function dispFrame(i)
+         -- left/right
+         local framel = self[1][i]
+         local framer = self[2][i]
+         -- optional load
+         if not self.load then 
+            framel = image.load(framel)
+            framer = image.load(framer)
          end
-         if not loop then break end
+         -- merged
+         frame:resize(framel:size(1),framel:size(2),3)
+         frame:select(3,1):copy(framel:select(3,1))
+         frame:select(3,2):copy(framer:select(3,1))
+         frame:select(3,3):copy(framer:select(3,1))
+         -- disp
+         disp:show{tensor=frame,
+                   painter=p,
+                   legend='playing 3D sequence [left=RED, right=CYAN]',
+                   zoom=zoom}
+         -- clean
+         collectgarbage()
       end
+
+      -- Loop Process
+      timer.interval = pause*1e3
+      local i = 1
+      qt.connect(timer,
+                 'timeout()',
+                 function()
+                    if not paused then
+                       dispFrame(i)
+                       if i < #self[1] then
+                          i = i + 1
+                       elseif loop then
+                          i = 1
+                       else
+                          i = 1
+                          paused = true
+                       end
+                    end
+                 end)
+      timer:start()
+
+      -- Msg
+      print('<Video:play3D> started - press space to pause/resume/restart')
    end
 
 
@@ -352,16 +561,16 @@ do
       -- usage
       local _, zoom, savefname = toolBox.unpack(
          {...},
-         'video.playYouTube3D',
+         'video:playYouTube3D',
          'plays a video:\n'
-            .. ' + video must have been loaded with video.loadVideo()\n'
+            .. ' + video must have been loaded with video:loadVideo()\n'
             .. ' + or else, it must be a list of pairs of tensors',
          {arg='zoom', type='number', help='zoom', default=1},
          {arg='savefname', type='string', help='filename in which output movie will be saved'}
       )
 
       -- enforce 16:9 ratio
-      local h  = self.h
+      local h  = self.height
       local w  = (h * 16 / 9)
       local w2 = w/2
       local frame = torch.Tensor(w,h,3)
@@ -382,7 +591,7 @@ do
          local frameL = self[1][i]
          local frameR = self[2][i]
          -- optional load
-         if not self.loaded then 
+         if not self.load then 
             frameL = image.load(frameL)
             frameR = image.load(frameR)
          end

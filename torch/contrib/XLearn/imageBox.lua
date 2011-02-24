@@ -21,28 +21,17 @@ do
    -- Read a PPM into Tensor [0,1] pixels
    --
    function image.loadPPM( filePathname, mode )
-
       local MAXVAL = 255
-
-      if mode and mode ~= 1 then
-         error( NOT_IMPLEMENTED )
-      end
 
       local input = io.open( filePathname, "rb" )
       if not input then error( FILE_NOT_FOUND .. ": " .. filePathname ) end
 
-      -- check id
-      if "P2" ~= input:read( 2 ) then
-         error( IMAGE_FORMAT_INVALID .. ": " .. filePathname )
-      end
-
       -- read width, height, maxval
       function readNumber()
-
          -- skip blanks and comments
          repeat
             local c
-
+            
             -- read chars until non blank
             repeat
                c = input:read( 1 )
@@ -63,26 +52,65 @@ do
          return input:read( "*n" )
       end
 
-      local width, height, maxval = readNumber(), readNumber(), readNumber()
-
-      -- skip single blank
-      input:seek( "cur", 1 )
-
-      -- read pixels
-      tensorLoaded = torch.Tensor(width,height)
-      for i = 1,tensorLoaded:storage():size() do
-         local c = readNumber()
-         if not c then
-            error( IMAGE_FILE_INCOMPLETE .. ": " .. filePathname )
+      -- check id
+      local s = input:read('*line')
+      if "P2" == s then
+         if mode and mode ~= 1 then
+            error( NOT_IMPLEMENTED )
          end
-
-         -- rescale to [-1,1]
-         if (c > maxval) then c = c - (maxval+1)*2 end
-         local channel = c / (MAXVAL+1)
-
-         tensorLoaded:storage()[i] = channel
+         local width, height, maxval = readNumber(), readNumber(), readNumber()
+         -- skip single blank
+         input:seek( "cur", 1 )
+         -- read pixels
+         tensorLoaded = torch.Tensor(width,height)
+         for i = 1,tensorLoaded:storage():size() do
+            local c = readNumber()
+            if not c then
+               error( IMAGE_FILE_INCOMPLETE .. ": " .. filePathname )
+            end
+            -- rescale to [-1,1]
+            if (c > maxval) then c = c - (maxval+1)*2 end
+            local channel = c / (MAXVAL+1)
+            tensorLoaded:storage()[i] = channel
+         end
+      elseif 'P6' == s then
+         local pos = input:seek()
+         local s = input:read('*line')
+         -- remove comment
+         while string.find(s,"^%s*#") do
+            pos = input:seek()
+            s = input:read('*line')
+         end
+         -- go back one line
+         input:seek("set",pos)
+         local width = input:read('*number')
+         local height = input:read('*number')
+         local depth = input:read('*number')
+         depth = input:read('*number')
+         depth = input:read('*number')
+         local data = input:read('*all')
+         -- read pixels
+         local tensorTmp = torch.Tensor(3,width,height)
+         if depth == 65535 then
+            local small,big,val
+            for i = 1,tensorTmp:storage():size() do
+               small = string.byte(data,i*2)
+               big = string.byte(data,i*2+1)
+               val = big*256+small
+               -- rescale to [0,1]
+               --local channel = val / depth
+               tensorTmp:storage()[i] = val--channel
+            end
+         else
+            error( IMAGE_FORMAT_INVALID .. ": " .. filePathname )
+         end
+         tensorLoaded = torch.Tensor(width,height,3)
+         for i = 1,3 do
+            tensorLoaded:select(3,i):copy(tensorTmp[i])
+         end
+      else
+         error( IMAGE_FORMAT_INVALID .. ": " .. filePathname )
       end
-
       input:close()
 
       return tensorLoaded
@@ -306,6 +334,34 @@ do
                                               + math.pow((j-center_y)
                                                       /(sigma_y*width_y),2)/2))
          end
+      end
+      if normalize then
+         gauss:div(gauss:sum())
+      end
+      return gauss
+   end
+
+   function image.gaussian1D(...)
+      -- process args
+      local _, size, sigma, amplitude, normalize
+         = toolBox.unpack(
+         {...},
+         'image.gaussian1D',
+         'returns a 1D gaussian kernel',
+         {arg='size', type='number', help='size the kernel', default=3},
+         {arg='sigma', type='number', help='Sigma', default=0.25},
+         {arg='amplitude', type='number', help='Amplitute of the gaussian (max value)', default=1},
+         {arg='normalize', type='number', help='Normalize kernel (exc Amplitude)', default=false}
+      )
+
+      -- local vars
+      local center = math.ceil(size/2)
+
+      -- generate kernel
+      local gauss = torch.Tensor(size)
+      for i=1,size do
+         gauss[i] = amplitude * math.exp(-(math.pow((i-center)
+                                                 /(sigma*size),2)/2))
       end
       if normalize then
          gauss:div(gauss:sum())
@@ -779,8 +835,14 @@ do
       -- if images are in a tensor form, then create a list
       if type(images) == 'userdata' then
          local limages = {}
-         for i = 1,images:size(3) do
-            table.insert(limages, images:select(3,i))
+         if images:nDimension() == 4 then
+            for i = 1,images:size(4) do
+               table.insert(limages, images:select(4,i))
+            end
+         else
+            for i = 1,images:size(3) do
+               table.insert(limages, images:select(3,i))
+            end
          end
          images = limages
       elseif type(images) ~= 'table' then
@@ -913,7 +975,7 @@ do
    end
 
    function image.maskToRGB(mask, colorMap, rgbmap)
-      --local rgbmap = lab.zeros(mask:size(1), mask:size(2), 3)
+      rgbmap = rgbmap or lab.zeros(mask:size(1), mask:size(2), 3)
       rgbmap:fill(0)
 
       -- DEBUG
@@ -1572,44 +1634,70 @@ do
    -- @param scales   a list of scales to be generated
    -- @param minSize  the minimum size to generate
    --
-   function image.makePyramid(args)
-      -- args
-      local tensor = args.tensor
-      local scales = args.scales -- or {1} --now automatic scaling
-      local minSize = args.minSize or 5 
-      -- vars
-      local result = {}
+   function image.makePyramid(...)
+      -- process args
+      local _, tensor, scales, ratio, minSize = toolBox.unpack(
+         {...},
+         'image.makePyramid',
+         'creates a pyramid out of a 2/3/4D tensor',
+         {arg='tensor', type='torch.Tensor', help='input tensor, must be 2D, 3D or 4D', req=true},
+         {arg='scales', type='table', help='a list of scales is used)'},
+         {arg='ratio', type='table', help='if scales not provided, ratio is used to autogen scales',
+                       default=1/math.sqrt(2)},
+         {arg='min_size', type='number', help='minimum size after rescaling', default=5}
+      )
 
       -- create pyramid
-      if scales then
-         for i=1,#scales do
-            local dimx = math.floor(tensor:size(1)*scales[i])
-            local dimy = math.floor(tensor:size(2)*scales[i])
-            local dimz = tensor:size(3)
-            local temp = torch.Tensor( dimx, dimy, dimz )
-            image.scale(tensor, temp, 'simple')
-            table.insert(result, temp)
+      local create 
+         = function(tensor)
+              local result = {}
+              local idx = 1
+              local dimx = tensor:size(1)
+              local dimy = tensor:size(2)
+              local dimz = tensor:size(3)
+              local temp = torch.Tensor():resizeAs(tensor):copy(tensor)
+              repeat
+                 -- compute reduce size
+                 if scales then
+                    if not scales[idx] then break end
+                    if scales[idx] == 1 then
+                       table.insert(result, torch.Tensor():resizeAs(temp):copy(temp))
+                       idx = idx + 1
+                    end
+                    dimx = math.floor(tensor:size(1)*scales[idx])
+                    dimy = math.floor(tensor:size(2)*scales[idx])
+                 else
+                    if idx == 1 then 
+                       table.insert(result, torch.Tensor():resizeAs(temp):copy(temp))
+                    end
+                    dimx = math.floor(dimx*ratio)
+                    dimy = math.floor(dimy*ratio)
+                 end
+                 if dimx<minSize or dimy<minSize then break end
+                 -- resize
+                 local res = torch.Tensor(dimx,dimy,dimz)
+                 image.scale(temp, res, 'bilinear')
+                 -- save
+                 table.insert(result, res)
+                 idx = idx + 1
+              until false
+              return result
+           end
+
+      -- if 4D, assume a list of 3D images
+      local result
+      if tensor:nDimension() == 4 then
+         result = {}
+         for i = 1,tensor:size(4) do
+            local slice = tensor:select(4,i)
+            table.insert(result, create(slice))
          end
-      else  -- scale by a factor of sqrt(2)
-         local scaleFactor = math.sqrt(2)
-         local dimx = tensor:size(1)
-         local dimy = tensor:size(2)
-         local dimz = tensor:size(3)
-         local temp = torch.Tensor():resizeAs(tensor):copy(tensor)
-         -- gaussian kernel for smoothing (band pass)
-         local bandPassKernel = image.laplacian{width=5, normalize=true}
-         repeat
-            table.insert(result, temp)
-            -- compute reduce size
-            dimx = math.floor(dimx/scaleFactor)
-            dimy = math.floor(dimy/scaleFactor)
-            if dimx<minSize or dimy<minSize then break end
-            -- compute the band-pass
-            bandPassed = image.convolve(temp,bandPassKernel)
-            temp = torch.Tensor( dimx, dimy, dimz )
-            image.scale(bandPassed, temp, 'simple')
-         until false
+      else
+         -- 3D or 2D, plain images
+         result =  create(tensor)
       end
+
+      -- done
       return result
    end
 
@@ -1891,7 +1979,7 @@ do
       if painter == nil and dumpfile ~= nil then
          print('# Dumping network internals to file')
          painter = qtwidget.newimage(4000,3000)
-      else
+      elseif painter == nil then
          print('# Displaying network internals')
          painter = qtwidget.newwindow(1600,1200,legend)
       end

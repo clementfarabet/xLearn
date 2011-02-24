@@ -149,7 +149,24 @@ function toolBox.unpack(args, funcname, description, ...)
    dargs[17], dargs[18], dargs[19], dargs[20], dargs[21], dargs[22], dargs[23], dargs[24],
    dargs[25], dargs[26], dargs[27], dargs[28], dargs[29], dargs[30], dargs[31], dargs[32],
    dargs[33], dargs[34], dargs[35], dargs[36], dargs[37], dargs[38], dargs[39], dargs[40],
-   dargs[41], dargs[42], dargs[43], dargs[44], dargs[45], dargs[46], dargs[47], dargs[48]
+   dargs[41], dargs[42], dargs[43], dargs[44], dargs[45], dargs[46], dargs[47], dargs[48],
+   dargs[49], dargs[50], dargs[51], dargs[52], dargs[53], dargs[54], dargs[55], dargs[56]
+end
+
+--------------------------------------------------------------------------------
+-- toolBox.unpack_class()
+-- standard argument function for classes: used to handle named arguments, and 
+-- display automated help for functions
+-- auto inits the self with usage
+--------------------------------------------------------------------------------
+function toolBox.unpack_class(object, args, funcname, description, ...)
+   local dargs = toolBox.unpack(args, funcname, description, ...)
+   for k,v in pairs(dargs) do
+      object[k] = v
+   end
+   for i = 1,#object do
+      object[i] = nil
+   end
 end
 
 --------------------------------------------------------------------------------
@@ -439,6 +456,24 @@ function toolBox.fileExists(filename)
    end
 end
 
+--------------------------------------------------------------------------------
+-- toolBox.isDir()    
+-- test if a path is a directory
+--------------------------------------------------------------------------------
+function toolBox.isDir(path)
+   require 'posix'
+   local file = io.open(path)
+   -- check the path exist
+   if file then
+      io.close(file)
+      -- check it's a directory
+      if posix.stat(path).type == 'directory' then
+         return true
+      end
+   end
+   return false
+end
+
 
 --------------------------------------------------------------------------------
 -- toolBox.printMetaTable()    
@@ -489,6 +524,29 @@ function toolBox.require(package)
    end
 end
 xrequire = toolBox.require
+
+
+--------------------------------------------------------------------------------
+-- toolBox.error(message)
+-- prints an error with nice formatting. If domain is provided, it is used as
+-- following: <domain> msg
+--------------------------------------------------------------------------------
+function toolBox.error(message, domain, usage) 
+   if domain then
+      message = '<' .. domain .. '> ' .. message
+   else
+      message = 'ERROR: ' .. message
+   end
+   local c = toolBox.COLORS
+   local col_msg = c.Red .. message .. c.none
+   if usage then
+      print(col_msg)
+      error(usage)
+   else
+      error(col_msg)
+   end
+end
+xerror = toolBox.error
 
 
 --------------------------------------------------------------------------------

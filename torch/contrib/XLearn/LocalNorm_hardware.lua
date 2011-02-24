@@ -249,7 +249,7 @@ function LocalNorm_hardware:forward(input)
 
    -- generate coefs for sqrt
    local mapping
-   threshold = threshold or 1/256
+   threshold = self.fixedThres or 1/256
    mapping = function (x) 
 		x = x / self.nfeatures
 		if x < threshold then return threshold 
@@ -258,7 +258,7 @@ function LocalNorm_hardware:forward(input)
    sqrtCoefs = math.approx{mapping=mapping, min=0, max=num.max,
 			   nbSegments=8, Q=num.frac_,
 			   verbose=false, epsilon=25/256,error_type = 0,
- 			   name = 'Sqrt_th_div_'..self.nfeatures}
+ 			   name = 'Sqrt_th_div_'..self.nfeatures..'_'..threshold}
    
    local segments_array = torch.Tensor(3, #sqrtCoefs)
    
@@ -589,19 +589,22 @@ end
 
 
 function LocalNorm_hardware:backward(input, gradOutput)
-   self.gradInput:resizeAs(input):zero()
+   --self.gradInput:resizeAs(input):zero()
 
-   local gdivmod = self.divmod:backward({self.inzmean,self.thstd},gradOutput)
-   local gthstd = gdivmod[2]
-   local ginzmean = gdivmod[1]
-   local ginstd = self.thresmod:backward(self.instd,gthstd)
-   local ginvar = self.sqrtmod:backward(self.invar,ginstd)
-   local ginzmeansq = self.varmod:backward(self.inzmeansq,ginvar)
-   ginzmean:add(self.squaremod:backward(self.inzmean,ginzmeansq))
-   local gdifmod = self.difmod:backward({input,self.inmean},ginzmean)
-   local ginmean = gdifmod[2]
-   self.gradInput:add(gdifmod[1])
-   self.gradInput:add(self.meanmod:backward(input,ginmean))
+   -- local gdivmod = self.divmod:backward({self.inzmean,self.thstd},gradOutput)
+--    local gthstd = gdivmod[2]
+--    local ginzmean = gdivmod[1]
+--    local ginstd = self.thresmod:backward(self.instd,gthstd)
+--    local ginvar = self.sqrtmod:backward(self.invar,ginstd)
+--    local ginzmeansq = self.varmod:backward(self.inzmeansq,ginvar)
+--    ginzmean:add(self.squaremod:backward(self.inzmean,ginzmeansq))
+--    local gdifmod = self.difmod:backward({input,self.inmean},ginzmean)
+--    local ginmean = gdifmod[2]
+--    self.gradInput:add(gdifmod[1])
+--    self.gradInput:add(self.meanmod:backward(input,ginmean))
+   
+   self.gradInput:resizeAs(gradOutput):copy(gradOutput)
+   
    return self.gradInput
 end
 
@@ -613,9 +616,9 @@ function LocalNorm_hardware:zeroGradParameters()
    self.meanmod:zeroGradParameters()
    self.difmod:zeroGradParameters()
    self.squaremod:zeroGradParameters()
-   self.sqrtmod:zeroGradParameters()
+   --self.sqrtmod:zeroGradParameters()
    self.varmod:zeroGradParameters()
-   self.thresmod:zeroGradParameters()
+   --self.thresmod:zeroGradParameters()
    self.divmod:zeroGradParameters()
 end
 
@@ -655,4 +658,15 @@ function LocalNorm_hardware:read(file)
    self.invar = file:readObject()
    self.instd = file:readObject()
    self.thstd = file:readObject()
+   
+   self.infixed = torch.Tensor()
+   self.paddedin = torch.Tensor()
+   self.inmeansc = torch.Tensor()
+   self.insqrt = torch.Tensor()
+   self.sign = torch.Tensor()
+
+   self.summod = nn.Sequential()
+   self.summod:add(nn.Sum(3))
+   self.summod:add(nn.Replicate(self.nfeatures))
+   
 end

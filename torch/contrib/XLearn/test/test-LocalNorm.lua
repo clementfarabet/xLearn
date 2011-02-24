@@ -13,7 +13,7 @@ function test_LocalNorm()
    -- init kernel
    kernel = image.gaussian{width=kersize}
    -- init module
-   module = nn.LocalNorm(kernel,nbfeatures)
+   module = nn.LocalNorm(kernel,nbfeatures,0.1)
    -- init input
    input = lab.rand(inputSize,inputSize,nbfeatures)
    -- bprop

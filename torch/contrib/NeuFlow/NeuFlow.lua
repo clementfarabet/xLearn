@@ -240,6 +240,45 @@ do
       return dest
    end
 
+
+function NeuFlow:copyFromHost_ack(source, dest)
+      -- if no dest, create it
+      if not dest then
+         dest = self:allocHeap(source)
+      end
+      -- check if dest is a list of streams, or a stream
+      local ldest
+      if #dest == 0 then
+         ldest = {dest}
+      else
+         ldest = dest
+      end
+      -- if simulation, we replace this transfer by a plain copy
+      if self.mode == 'simulation' then
+         -- alloc in constant data:
+         source = self:allocData(source)
+         print('# copy host->dev [simul]: ' .. #ldest .. 'x' .. ldest[1].orig_h .. 'x' .. ldest[1].orig_w)
+         self:copy(source,ldest)
+      else
+         -- process list of streams
+         print('# copy host->dev: ' .. #ldest .. 'x' .. ldest[1].orig_h .. 'x' .. ldest[1].orig_w)
+         for i = 1,#ldest do
+            self.core:startProcess()
+            self.interface:streamFromHost_ack(ldest[i], 'default')
+            self.core:endProcess()
+         end
+      end
+      -- always print a dummy flag, useful for profiling
+      if self.mode ~= 'simulation' then
+         self.core:startProcess()
+         self.interface:printToEthernet('copy-done')
+         self.core:endProcess()
+      end
+      return dest
+   end
+
+
+
    function NeuFlow:copyFromHost(source, dest)
       -- if no dest, create it
       if not dest then
@@ -275,6 +314,8 @@ do
       end
       return dest
    end
+
+
 
    function NeuFlow:copyToHost(source, dest)
       -- no ack in simulation
@@ -312,6 +353,45 @@ do
       dest:resize(orig_w, orig_h, #lsource)
       return dest
    end
+
+
+function NeuFlow:copyToHost_ack(source, dest)
+      -- no ack in simulation
+      local ack
+      if self.mode == 'simulation' then
+         ack = 'no-ack'
+      end
+      -- always print a dummy flag, useful for profiling
+      if self.mode ~= 'simulation' then
+         self.core:startProcess()
+         self.interface:printToEthernet('copy-starting')
+         self.core:endProcess()
+      end
+      -- check if source is a list of streams, or a stream
+      local lsource
+      if #source == 0 then
+         lsource = {source}
+      else
+         lsource = source
+      end
+      -- record original sizes
+      local orig_h = lsource[1].orig_h
+      local orig_w = lsource[1].orig_w
+      -- process list of streams
+      print('# copy dev->host: ' .. #lsource .. 'x' .. lsource[1].orig_h .. 'x' .. lsource[1].orig_w)
+      for i = 1,#lsource do
+         self.core:startProcess()
+         self.interface:streamToHost_ack(lsource[i], 'default', ack)
+         self.core:endProcess()
+      end
+      -- create/resize dest
+      if not dest then
+         dest = torch.Tensor()
+      end
+      dest:resize(orig_w, orig_h, #lsource)
+      return dest
+   end
+
 
    ----------------------------------------------------------------------
    -- wrappers for compilers
@@ -474,6 +554,22 @@ do
       self.profiler:lap('copy-to-dev')
    end
 
+
+   function NeuFlow:copyToDev_ack(tensor)
+      self.profiler:start('copy-to-dev')
+      local dims = tensor:nDimension()
+      if dims == 3 then
+         for i = 1,tensor:size(3) do
+            libetherflow.send_tensor_ack(tensor:select(3,i))
+         end
+      else
+         libetherflow.send_tensor_ack(tensor)
+      end
+      self:getFrame('copy-done')
+      self.profiler:lap('copy-to-dev')
+   end
+
+
    ----------------------------------------------------------------------
    -- receive tensor
    --
@@ -493,6 +589,29 @@ do
       end
       self.profiler:lap('copy-from-dev')
    end
+
+   function NeuFlow:copyFromDev_ack(tensor)
+      libetherflow.set_first_call(1)
+      profiler_neuflow = self.profiler:start('on-board-processing')
+      self.profiler:setColor('on-board-processing', 'blue')
+      self:getFrame('copy-starting')
+      self.profiler:lap('on-board-processing')
+      self.profiler:start('copy-from-dev')
+      local dims = tensor:nDimension()
+      --libetherflow.set_first_call(1)
+      if dims == 3 then
+         for i = 1,tensor:size(3) do
+            libetherflow.receive_tensor_ack(tensor:select(3,i))
+	    libetherflow.set_first_call(0)
+         end
+      else
+	 libetherflow.receive_tensor_ack(tensor)
+      end
+      libetherflow.set_first_call(1)
+      self.profiler:lap('copy-from-dev')
+   end
+
+
 
    ----------------------------------------------------------------------
    -- helper functions: 

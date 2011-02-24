@@ -56,8 +56,8 @@ static inline float diff(image<float> *r, image<float> *g, image<float> *b,
  * min_size: minimum component size (enforced by post-processing stage).
  * num_ccs: number of connected components in the segmentation.
  */
-image<rgb> *segment_image(image<rgb> *im, float sigma, float c, int min_size,
-			  int *num_ccs) {
+static image<rgb> *segment_image(image<rgb> *im, float sigma, float c, int min_size, int method,
+                                 int *num_ccs) {
   int width = im->width();
   int height = im->height();
 
@@ -80,40 +80,72 @@ image<rgb> *segment_image(image<rgb> *im, float sigma, float c, int min_size,
   delete g;
   delete b;
  
-  // build graph
-  edge *edges = new edge[width*height*4];
-  int num = 0;
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      if (x < width-1) {
-	edges[num].a = y * width + x;
-	edges[num].b = y * width + (x+1);
-	edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y);
-	num++;
-      }
+  // graph data;
+  edge *edges=NULL; int num = 0;
 
-      if (y < height-1) {
-	edges[num].a = y * width + x;
-	edges[num].b = (y+1) * width + x;
-	edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x, y+1);
-	num++;
-      }
+  // 2 methods (0 = 4 edges per vertex, 1 = 8 edges per vertex)
+  if (method == 4) {
 
-      if ((x < width-1) && (y < height-1)) {
-	edges[num].a = y * width + x;
-	edges[num].b = (y+1) * width + (x+1);
-	edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y+1);
-	num++;
-      }
+    // build graph with 4-connex
+    edges = new edge[width*height*2];
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (x < width-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = y * width + (x+1);
+          edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y);
+          num++;
+        }
 
-      if ((x < width-1) && (y > 0)) {
-	edges[num].a = y * width + x;
-	edges[num].b = (y-1) * width + (x+1);
-	edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y-1);
-	num++;
+        if (y < height-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y+1) * width + x;
+          edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x, y+1);
+          num++;
+        }
       }
     }
+
+  } else if (method == 8) {
+
+    // build graph with 8-connex
+    edges = new edge[width*height*4];
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (x < width-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = y * width + (x+1);
+          edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y);
+          num++;
+        }
+
+        if (y < height-1) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y+1) * width + x;
+          edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x, y+1);
+          num++;
+        }
+
+        if ((x < width-1) && (y < height-1)) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y+1) * width + (x+1);
+          edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y+1);
+          num++;
+        }
+
+        if ((x < width-1) && (y > 0)) {
+          edges[num].a = y * width + x;
+          edges[num].b = (y-1) * width + (x+1);
+          edges[num].w = diff(smooth_r, smooth_g, smooth_b, x, y, x+1, y-1);
+          num++;
+        }
+      }
+    }
+
+  } else {
+    THError("<libmstsegm.infer> unsupported connectivity (only 8 or 4 are valid)");
   }
+
   delete smooth_r;
   delete smooth_g;
   delete smooth_b;

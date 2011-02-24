@@ -12,7 +12,7 @@ function Threshold:__init(th,v)
                           {type='number', help='value'}))
    end
 
-   self.threshold = th
+   self.threshold = th or 1e-6
    self.val = v or 0
 end
 

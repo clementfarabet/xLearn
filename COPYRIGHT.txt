@@ -11,6 +11,7 @@ are distributed under other, more restrictive licenses:
 
 + stereo: GNU General Public License
 + mstsegm: GNU General Public License
++ pink: CeCILL license
 + powerwatersegm: CeCILL license
 + CSparse: GNU Lesser General Public License
 + opticalFlow: no original license [but forbids commercial use]
@@ -92,11 +93,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 
 
 ======================================================================
-For the package powerwatersegm:
+For the packages powerwatersegm + pink:
 
-Copyright ESIEE (2009) Camille Couprie (c.couprie@esiee.fr)
+Copyright ESIEE (2009)
 
-Contributors : 
+Contributors :
+Michel Couprie (m.couprie@esiee.fr)
+Camille Couprie (c.couprie@esiee.fr)
 Hugues Talbot (h.talbot@esiee.fr)
 Leo Grady (leo.grady@siemens.com)
 Laurent Najman (l.najman@esiee.fr)

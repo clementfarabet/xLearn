@@ -13,11 +13,11 @@ end
 -- parse args
 op = OptionParser('%prog -s SOURCE [options]')
 op:add_option{'-s', '--source', action='store', dest='source', 
-              help='optional source, mostly to bypass camera: camera | lena'}
-op:add_option{'-t', '--type', action='store', dest='type', 
-              help='optional type, depends on the kind of source. for camera: opencv | camiface | v4linux'}
+              help='optional source, mostly to bypass camera: camera | lena | video'}
 op:add_option{'-c', '--camera', action='store', dest='camidx', 
               help='if source=camera, you can specify the camera index: /dev/videoIDX [default=0]'}
+op:add_option{'-p', '--path', action='store', dest='path', 
+              help='path to video'}
 options,args = op:parse_args()
 
 -- need QT
@@ -30,7 +30,11 @@ local ui = paths.thisfile('opencv-tester.ui')
 function demo()
 
    -- Camera frame
-   local camera = nn.ImageSource(options.source or 'camera', options.type, options.camidx)
+   local camera = nn.ImageSource{type = options.source or 'camera', 
+                                 path = options.path,
+                                 cam_idx = options.camidx,
+                                 fps = 20}
+
    local vframesat = torch.Tensor(640,480,3)
    local previous = torch.Tensor(640,480,3)
    local cameraframe = torch.CharTensor(640,480,3)
