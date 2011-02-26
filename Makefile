@@ -9,6 +9,8 @@ USE_3RDPARTY=1
 USE_XFLOW=1
 USE_JPEG=1
 USE_MPEG2=1
+USE_KINECT=1
+USE_MINCUT=1
 USE_LUAJIT=0
 USE_THREAD=1
 USE_BIT=1
@@ -39,6 +41,8 @@ help:
 	@-echo "  USE_3RDPARTY=1|0  [current="${USE_3RDPARTY}"]   ? 3rd party packages (stereo, segmentation, optical flow)"
 	@-echo "  USE_JPEG=1|0      [current="${USE_JPEG}"]   ? LibJpeg wrapper"
 	@-echo "  USE_MPEG2=1|0     [current="${USE_MPEG2}"]   ? LibMpeg2 wrapper"
+	@-echo "  USE_KINECT=1|0    [current="${USE_KINECT}"]   ? Libfreenect wrapper"
+	@-echo "  USE_MINCUT=1|0    [current="${USE_MINCUT}"]   ? mincut segmentation libraryr"
 	@-echo "  USE_BITOP=1|0     [current="${USE_BIT}"]   ? LuaBitOP library (bitwise operators for Lua)"
 	@-echo "  USE_THREAD=1|0    [current="${USE_THREAD}"]   ? Multithreaded Lib for Lua, allows threads sharing the same Lua stack"
 	@-echo "  USE_LUAJIT=1|0    [current="${USE_LUAJIT}"]   ? Replaces Lua by LuaJIT (Linux only)"
@@ -69,7 +73,7 @@ help:
 
 build: camiface luajit
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=0 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=0 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} -DWITH_CONTRIB_Kinect=${USE_KINECT} -DWITH_CONTRIB_mincut=${USE_MINCUT} && make
 	@-echo ""
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "Build succesful, install with admin rights (in /usr/local):"

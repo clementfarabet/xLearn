@@ -51,6 +51,10 @@ LuaJIT           the entire framework can be built against LuaJIT for
               
 opencv           a wrapper for OpenCV, for now just a couple of functions, 
                  super easy to extend
+
+Kinect           a wrapper for libfreenect, this library allow to grab
+                 depth and rgb from kinect devices. (libfreenect need
+                 to be installed: http://openkinect.org/wiki/Getting_Started)
               
 debugger         the open-source debugger framework for Lua (activated by 
                  requiring 'debug')
@@ -60,6 +64,9 @@ camiface         a wrapper for libcamiface, to interface webcams on MacOS
 video4linux      a wrapper for libv4l2, to interface webcams in Linux
 
 mstsegm          a wrapper around P. Felzenszwalb’s image segmentation lib
+
+mincut           a segmentation lib using mincut algorithm from
+                 Vladimir Kolmogorov's code
 
 powerwatersegm   a wrapper around C. Couprie’s Powerwatershed lib
 
