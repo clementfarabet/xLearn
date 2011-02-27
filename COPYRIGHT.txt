@@ -6,9 +6,10 @@ both academic and commercial purposes at absolutely no cost.
 
 For details and rationale, see http://www.lua.org/license.html.
 
-All the 3rd-Party modules (available via 'make USE_3RDPARTY=1')
-are distributed under other, more restrictive licenses:
+Most other 3rd-Party modules are distributed under other, 
+more restrictive licenses:
 
++ vlfeat: GNU General Public License
 + stereo: GNU General Public License
 + mstsegm: GNU General Public License
 + pink: CeCILL license
@@ -24,10 +25,10 @@ each torch/contrib/{PACKAGE_NAME}/init.lua does so.
 
 
 ======================================================================
-For all the main packages EXCLUDING stereo, mstsegm, opticalFlow:
+For all the main packages EXCLUDING most 3rd party modules:
 
 Copyright (c) 2009-2010 New York University, Yale University
-Contributors: Clement Farabet, Benoit Corda, Polina Akselrod
+Contributors: Clement Farabet, Benoit Corda, Marco Scoffier, Polina Akselrod
 
 Copyright (c) 2006-2008 NEC Laboratories America
 Contributors: Ronan Collobert, Leon Bottou, Jason Weston, Iain Melvin
@@ -154,3 +155,24 @@ Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public
 License along with this Module; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+
+======================================================================
+For the two package VLFeat:
+
+Copyright (C) 2005-10 Andrea Vedaldi and Brian Fulkerson
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
+USA
