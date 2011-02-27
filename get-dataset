@@ -5,7 +5,7 @@ if [ $# == 0 ]
 then
     echo "syntax:"
     echo "  get-dataset dataset"
-    echo "  dataset = faces | spanish | mnist | lagr"
+    echo "  dataset = faces | spanish | mnist | lagr | coil100"
     exit
 fi
 
@@ -57,8 +57,46 @@ if which wget >/dev/null; then
         echo "LAGR test data installed in datasets/"
         exit
     fi
+    if [ $1 == "coil100" ] 
+    then
+        echo "Installing COIL-100 data in datasets/"
+        TARNAME=coil-100.tar.gz
+        cd datasets
+        rm -f $TARNAME
+        wget http://www.cs.columbia.edu/CAVE/databases/SLAM_coil-20_coil-100/coil-100/$TARNAME
+        tar -xzvf $TARNAME
+        rm -f $TARNAME
+        cd  coil-100
+        mkdir test
+        mkdir train
+        # move the files into train and test folders accordingly
+        echo "Moving files..."
+        for j in {1..100}
+        do 
+            PJ=`printf "%03d" $j`
+            mkdir test/$PJ
+            mkdir train/$PJ
+            # copy the training data
+            for i in {0..3}
+            do
+                PI=`printf "%03d" $((90*i))`
+                mv obj$((j))__$((90*i)).ppm train/$PJ/obj${PJ}__${PI}.ppm
+            done
+            for i in {0..71}
+            do 
+                PI=`printf "%03d" $((5*i))`
+                f=obj$((j))__$((5*i)).ppm
+                if [ -e $f ]
+                then
+                    mv obj$((j))__$((5*i)).ppm test/$PJ/obj${PJ}__${PI}.ppm
+                fi
+            done
+        done
+        echo "COIL-100 test and train  data installed in datasets/"
+        exit
+    fi
 else
-    echo "Wget couldn't be found. Install it with:"
+    echo "wget couldn't be found. Install it with:"
     echo "sudo port install wget , then retry"
     echo "(or sudo apt-get install wget)"
 fi
