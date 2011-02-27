@@ -26,7 +26,7 @@ do
          {arg='length', type='number', help='length, in seconds', default=5},
          {arg='channel', type='number', help='video channel', default=0},
          {arg='load', type='boolean', help='loads frames after conversion', default=true},
-         {arg='encoding', type='string', help='format of dumped frames', default='jpg'},
+         {arg='encoding', type='string', help='format of dumped frames', default='png'},
          {arg='tensor', type='torch.Tensor', help='provide a packed tensor (WxHxCxN or WxHxN), that bypasses path'}
       )
 
@@ -142,7 +142,7 @@ do
             if not self.load then
                table.insert(where, fname)
             else
-               table.insert(where, image.load(fname))
+               table.insert(where, image.load(fname):narrow(3,1,3))
             end
             idx = idx + 1
          end
@@ -392,7 +392,7 @@ do
       -- disp frame function
       local function dispFrame(i)
          local frame = self[channel][i]
-         if not self.load then frame = image.load(frame) end
+         if not self.load then frame = image.load(frame):narrow(3,1,3) end
          disp:show{tensor=frame,painter=p,legend='playing sequence',zoom=zoom}
          collectgarbage()
       end
@@ -498,8 +498,8 @@ do
          local framer = self[2][i]
          -- optional load
          if not self.load then 
-            framel = image.load(framel)
-            framer = image.load(framer)
+            framel = image.load(framel):narrow(3,1,3)
+            framer = image.load(framer):narrow(3,1,3)
          end
          -- merged
          frame:resize(framel:size(1),framel:size(2),3)
@@ -592,8 +592,8 @@ do
          local frameR = self[2][i]
          -- optional load
          if not self.load then 
-            frameL = image.load(frameL)
-            frameR = image.load(frameR)
+            frameL = image.load(frameL):narrow(3,1,3)
+            frameR = image.load(frameR):narrow(3,1,3)
          end
 	 print('FrameL [' .. frameL:size(1) .. ', ' .. frameL:size(2) .. ', ' .. frameL:size(3) .. ']')
 	 

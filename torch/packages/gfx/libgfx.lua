@@ -215,7 +215,7 @@ function gfx.set(self,variableName,value)
 	end
 	f.recursiveset(self,variableName,value)
 
-	self:redraw(); -- redraw after set
+	--self:redraw(); -- redraw after set
 end 
 
 function gfx.setPosition(self,x,y,w,h,redraw,cnt)

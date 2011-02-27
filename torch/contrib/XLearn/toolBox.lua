@@ -124,7 +124,7 @@ function toolBox.unpack(args, funcname, description, ...)
    local c = toolBox.COLORS
    for i,def in ipairs(defs) do
       -- is value requested ?
-      if def.req and not iargs[def.arg] then
+      if def.req and iargs[def.arg] == nil then
          print(c.Red .. 'missing argument: ' .. def.arg .. c.none)
          error(usage)
       end

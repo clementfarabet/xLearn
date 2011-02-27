@@ -247,7 +247,7 @@ do
    --
    function image.display(...)
       -- usage
-      local _, input, zoom, min, max, w, legend = toolBox.unpack(
+      local _, input, zoom, min, max, legend, w, wx, wy, w2 = toolBox.unpack(
          {...},
          'image.display',
          'displays a single image, with optional saturation/zoom;\n'
@@ -256,8 +256,11 @@ do
          {arg='zoom', type='number', help='display zoom', default=1},
          {arg='min', type='number', help='lower-bound for range'},
          {arg='max', type='number', help='upper-bound for range'},
+         {arg='legend', type='string', help='legend', default='image.display'},
          {arg='win', type='gfx.Window', help='window descriptor'},
-         {arg='legend', type='string', help='legend', default='image.display'}
+         {arg='win_w', type='number', help='window width', default=1200},
+         {arg='win_h', type='number', help='window height', default=700},
+         {arg='window', type='gfx.Window', help='window descriptor (same as win, for compatibility)'}
       )
 
       if input:nDimension() == 2 or input:size(3) == 1 or input:size(3) == 3 then
@@ -265,9 +268,9 @@ do
          local myIn = image.scaleForDisplay{tensor=input, min=min, max=max}
 
          -- Rescale geometry
-         local x = math.min(input:size(1)*zoom,800)
-         local y = math.min(input:size(2)*zoom,600)
-         w = w or gfx.Window(x,y,legend)
+         local x = math.min(input:size(1)*zoom,wx)
+         local y = math.min(input:size(2)*zoom,wy)
+         w = w or w2 or gfx.Window(x,y,legend)
 
          -- blit
          w:blit(myIn, zoom)
@@ -809,7 +812,7 @@ do
    function image.displayList(...)
       -- usage
       local _, images, zoom, min, max, offset_x, offset_y, 
-      legend, legends, window, window_w, window_h, font = toolBox.unpack(
+      legend, legends, window, window_w, window_h, window2, font = toolBox.unpack(
          {...},
          'image.displayList',
          'displays a list of images on a 2D grid;\n' ..
@@ -822,15 +825,16 @@ do
          {arg='offset_y', type='number', help='vertical display offset', default=0},
          {arg='legend', type='string', help='window title', default='image.displayList'},
          {arg='legends', type='string', help='individual legends'},
-         {arg='window', type='gfx.Window', help='window descriptor'},
-         {arg='win_w', type='number', help='window width', default=1000},
+         {arg='win', type='gfx.Window', help='window descriptor'},
+         {arg='win_w', type='number', help='window width', default=1200},
          {arg='win_h', type='number', help='window height', default=700},
+         {arg='window', type='gfx.Window', help='window descriptor (same as win, for compat)'},
          {arg='font', type='number', help='font size [default = 10*zoom]'}
       )
 
 
       -- create painter
-      local painter = window or gfx.Window(window_w, window_h, legend)
+      local painter = window or window2 or gfx.Window(window_w, window_h, legend)
 
       -- if images are in a tensor form, then create a list
       if type(images) == 'userdata' then
