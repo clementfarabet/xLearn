@@ -257,6 +257,7 @@ static CvPoint2D32f * torch_32F2opencvPoints(THTensor *src) {
   return points_cv;
 }
 
+
 //============================================================
 // Wrapper around simple OpenCV functions
 // All these functions work on the Lua stack
@@ -437,7 +438,8 @@ static int l_cvTrackPyrLK(lua_State *L) {
   THTensor * image2 = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
   THTensor * points1 = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
   THTensor * points2 = luaT_checkudata(L, 4, luaT_checktypename2id(L, "torch.Tensor"));
-  
+  THTensor * ff = 0;
+  THTensor * fe = 0;
 
   int count = points1->size[0];
   int win_size = 10;  
@@ -445,6 +447,15 @@ static int l_cvTrackPyrLK(lua_State *L) {
   // User values:
   if (lua_isnumber(L, 5)) {
     win_size = lua_tonumber(L, 5);
+  }
+
+  if (!lua_isnil(L,6)) {
+    ff = luaT_checkudata(L,6,luaT_checktypename2id(L, "torch.Tensor"));
+    THTensor_resize1d(ff,count);
+  }
+  if (!lua_isnil(L,7)) {
+    fe = luaT_checkudata(L,7,luaT_checktypename2id(L, "torch.Tensor"));
+    THTensor_resize1d(fe,count);
   }
 
   CvSize dest_size = cvSize(image1->size[0], image1->size[1]);
@@ -480,7 +491,17 @@ static int l_cvTrackPyrLK(lua_State *L) {
   
   // return results
   opencvPoints2torch_32F(points2_cv, count, points2);
-  
+  int i;
+  if (ff != 0){
+    for(i=0;i<count;i++){
+      THTensor_set1d(ff,i,features_found[i]);
+    }
+  }
+  if (fe != 0){
+    for(i=0;i<count;i++){
+      THTensor_set1d(fe,i,feature_errors[i]);
+    }
+  }
   // Deallocate points_cv
   cvFree(&points1_cv);
   cvFree(&points2_cv);
@@ -615,6 +636,12 @@ static int l_cvDrawFlowlinesOnImage (lua_State *L) {
   THTensor * points2 = luaT_checkudata(L,2, luaT_checktypename2id(L, "torch.Tensor"));
   THTensor * image   = luaT_checkudata(L,3, luaT_checktypename2id(L, "torch.Tensor"));
   THTensor * color   = luaT_checkudata(L,4, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor * mask    = 0;
+  int usemask = 0;
+  if (!lua_isnil(L,5)){
+    usemask = 1;
+    mask = luaT_checkudata(L,5, luaT_checktypename2id(L, "torch.Tensor"));
+  }
   IplImage * image_ipl = torch2opencv_8U(image);
   CvScalar color_cv = CV_RGB(THTensor_get1d(color,0),
 			     THTensor_get1d(color,1),
@@ -622,11 +649,13 @@ static int l_cvDrawFlowlinesOnImage (lua_State *L) {
   int count = points1->size[0];
   int i;
   for( i = 0; i < count; i++ ) {
-    CvPoint p0 = cvPoint( cvRound( THTensor_get2d(points1,i,0)),
-			  cvRound( THTensor_get2d(points1,i,1)));
-    CvPoint p1 = cvPoint( cvRound( THTensor_get2d(points2,i,0)),
-			  cvRound( THTensor_get2d(points2,i,1)));
-    cvLine( image_ipl, p0, p1, color_cv, 1, CV_AA, 0);
+    if ( !usemask || (THTensor_get1d(mask,i) > 0)){
+      CvPoint p0 = cvPoint( cvRound( THTensor_get2d(points1,i,0)),
+			    cvRound( THTensor_get2d(points1,i,1)));
+      CvPoint p1 = cvPoint( cvRound( THTensor_get2d(points2,i,0)),
+			    cvRound( THTensor_get2d(points2,i,1)));
+      cvLine( image_ipl, p0, p1, color_cv, 1, CV_AA, 0);
+    }
   }
   // return results
   opencv2torch_8U(image_ipl, image);
