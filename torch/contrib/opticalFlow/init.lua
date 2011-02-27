@@ -98,7 +98,7 @@ if not opticalFlowLoaded then
               {arg='flow_y', type='torch.Tensor', help='y component of flow field', req=true}
            )
            if inp:nDimension() ~= 3 then
-              error(args.usage)
+              xerror('image should be a WxHxN tensor',nil,args.usage)
            end
            return libopticalFlow.warp(inp, vx, vy)
         end
@@ -142,16 +142,15 @@ if not opticalFlowLoaded then
 
    -- compute norm from x,y:
    opticalFlow.computeNorm
-      = function(flow_x,flow_y)
-	   -- check args
-           if not flow_x or not flow_y then
-              error(
-                 toolBox.usage('opticalFlow.computeNorm',
-                               'computes norm (size) of flow field from flow_x and flow_y,\n',
-                               nil,
-                               {type='torch.Tensor', help='flow field (x), (WxH)', req=true},
-                               {type='torch.Tensor', help='flow field (y), (WxH)', req=true}))
-           end
+      = function(...)
+           -- check args
+           local args, flow_x, flow_y = toolBox.unpack(
+              {...},
+              'opticalFlow.computeNorm',
+              'computes norm (size) of flow field from flow_x and flow_y,\n',
+              {arg='flow_x', type='torch.Tensor', help='flow field (x), (WxH)', req=true},
+              {arg='flow_y', type='torch.Tensor', help='flow field (y), (WxH)', req=true}
+           )
            local flow_norm = torch.Tensor()
            local x_squared = torch.Tensor():resizeAs(flow_x):copy(flow_x):cmul(flow_x)
            flow_norm:resizeAs(flow_y):copy(flow_y):cmul(flow_y):add(x_squared):sqrt()
@@ -160,16 +159,15 @@ if not opticalFlowLoaded then
 
    -- compute angle from x,y:
    opticalFlow.computeAngle
-      = function(flow_x,flow_y)
-	   -- check args
-           if not flow_x or not flow_y then
-              error(
-                 toolBox.usage('opticalFlow.computeAngle',
-                               'computes angle (direction) of flow field from flow_x and flow_y,\n',
-                               nil,
-                               {type='torch.Tensor', help='flow field (x), (WxH)', req=true},
-                               {type='torch.Tensor', help='flow field (y), (WxH)', req=true}))
-           end
+      = function(...)
+           -- check args
+           local args, flow_x, flow_y = toolBox.unpack(
+              {...},
+              'opticalFlow.computeAngle',
+              'computes angle (direction) of flow field from flow_x and flow_y,\n',
+              {arg='flow_x', type='torch.Tensor', help='flow field (x), (WxH)', req=true},
+              {arg='flow_y', type='torch.Tensor', help='flow field (y), (WxH)', req=true}
+           )
 	   local flow_angle = torch.Tensor()
            flow_angle:resizeAs(flow_y):copy(flow_y):cdiv(flow_x):abs():atan():mul(180/math.pi)
            flow_angle:map2(flow_x, flow_y, function(h,x,y)
@@ -193,29 +191,48 @@ if not opticalFlowLoaded then
 
    -- generate colored version of flow fields
    opticalFlow.field2rgb
-      = function (norm,angle)
+      = function (...)
            -- check args
-           if not norm or not angle then
-              error(
-                 toolBox.usage('opticalFlow.field2rgb',
-                               'merges Norm and Angle flow fields into a single RGB image,\n'
-                                  .. 'where saturation=intensity, and hue=direction',
-                               nil,
-                               {type='torch.Tensor', help='flow field (norm), (WxH)', req=true},
-                               {type='torch.Tensor', help='flow field (angle), (WxH)', req=true}))
-           end
+           local args, norm, angle, max, legend = toolBox.unpack(
+              {...},
+              'opticalFlow.field2rgb',
+              'merges Norm and Angle flow fields into a single RGB image,\n'
+                 .. 'where saturation=intensity, and hue=direction',
+              {arg='norm', type='torch.Tensor', help='flow field (norm), (WxH)', req=true},
+              {arg='angle', type='torch.Tensor', help='flow field (angle), (WxH)', req=true},
+              {arg='max', type='number', help='if not provided, norm:max() is used'},
+              {arg='legend', type='boolean', help='prints a legend on the image', default=false}
+           )
+
+           -- max
+           local saturate = false
+           if max then saturate = true end
+           max = math.max(max or norm:max(), 1e-2)
 
            -- merge them into an HSL image
            local hsl = torch.Tensor(norm:size(1), norm:size(2), 3)
            -- hue = angle:
            hsl:select(3,1):copy(angle):div(360)
            -- saturation = normalized intensity:
-           hsl:select(3,2):copy(norm):div(math.max(norm:max(),1e-2))
-           -- constant light:
-           hsl:select(3,3):fill(0.5)
+           hsl:select(3,2):copy(norm):div(max)
+           if saturate then hsl:select(3,2):tanh() end
+           -- light varies inversely from saturation (null flow = white):
+           hsl:select(3,3):copy(hsl:select(3,2)):mul(-0.5):add(1)
 
            -- convert HSL to RGB
-           return image.hsl2rgb(hsl)
+           local rgb = image.hsl2rgb(hsl)
+
+           -- legend
+           if legend then
+              opticalFlow.legend = opticalFlow.legend
+                 or image.load(paths.concat(paths.install_lua_path, 'opticalFlow/legend.png'),3)
+              legend = torch.Tensor(hsl:size(2)/8, hsl:size(2)/8, 3)
+              image.scale(opticalFlow.legend, legend, 'bilinear')
+              rgb:narrow(1,1,legend:size(2)):narrow(2,hsl:size(2)-legend:size(2)+1,legend:size(2)):copy(legend)
+           end
+
+           -- done
+           return rgb
         end
 
    opticalFlowLoaded = true

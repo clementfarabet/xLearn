@@ -1,6 +1,6 @@
 
 SET(src opticalFlow.cpp GaussianPyramid.cpp GaussianPyramid.h Image.h ImageIO.h ImageProcessing.h OpticalFlowCode.cpp OpticalFlow.h project.h)
-SET(luasrc init.lua img1.jpg img2.jpg)
+SET(luasrc init.lua img1.jpg img2.jpg legend.png)
 
 SET(QT_MIN_VERSION "4.3.0")
 FIND_PACKAGE(Qt4)
