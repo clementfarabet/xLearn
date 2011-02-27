@@ -1,0 +1,161 @@
+/* 
+Librairie mctopo : 
+
+Calcul des nombres topologiques en 2D
+
+Michel Couprie 1996
+*/
+
+#include <mctopo.h>
+#include <mccodimage.h>
+#include <mcutil.h>
+
+/* 
+   Tableau des nombres topologiques - en global pour etre efficace.
+
+   Ce tableau contient les nombres topologiques T4bar et T8, pour toutes les
+     configurations de 8-voisinage possibles.
+   Si on inverse logiquement (~) l'index dans ce tableau, on obtient respectivement
+     T4 et T8bar.
+
+   Les configurations sont codees sur 8 bits, selon l'ordre suivant:
+
+		3	2	1			
+		4	X	0
+		5	6	7
+
+   Le mot de 8 bits provenant du codage d'une configuration de voisinage sert
+     a indexer le tableau TopoTab pour recuperer les nombres topologiques.
+*/
+static int TopoTab[256][2] = 
+{
+1,0,  1,1,  1,1,  1,1,  1,1,  1,1,  1,1,  1,1,  /*  0 -  7 */
+1,1,  2,2,  2,2,  2,2,  1,1,  1,1,  1,1,  1,1,  /*  8 - 1f */
+1,1,  2,2,  2,2,  2,2,  1,1,  1,1,  1,1,  1,1,  /* 10 - 17 */
+1,1,  2,2,  2,2,  2,2,  1,1,  1,1,  1,1,  1,1,  /* 18 - 1f */
+1,1,  2,2,  2,2,  2,2,  2,2,  2,2,  2,2,  2,2,  /* 20 - 27 */
+2,2,  3,3,  3,3,  3,3,  2,2,  2,2,  2,2,  2,2,  /* 28 - 2f */
+1,1,  2,2,  2,2,  2,2,  1,1,  1,1,  1,1,  1,1,  /* 30 - 37 */
+1,1,  2,2,  2,2,  2,2,  1,1,  1,1,  1,1,  1,1,  /* 38 - 3f */
+1,1,  1,1,  2,2,  1,1,  2,2,  1,1,  2,2,  1,1,  /* 40 - 47 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* 48 - 4f */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* 50 - 57 */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* 58 - 5f */
+1,1,  1,1,  2,2,  1,1,  2,2,  1,1,  2,2,  1,1,  /* 60 - 67 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* 68 - 6f */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* 70 - 77 */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* 78 - 7f */
+1,1,  1,1,  2,2,  1,1,  2,2,  1,1,  2,2,  1,1,  /* 80 - 87 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* 88 - 8f */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* 90 - 97 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* 98 - 9f */
+2,2,  2,2,  3,3,  2,2,  3,3,  2,2,  3,3,  2,2,  /* a0 - a7 */
+3,3,  3,3,  4,4,  3,3,  3,3,  2,2,  3,3,  2,2,  /* a8 - af */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* b0 - b7 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* b8 - bf */
+1,1,  1,1,  2,2,  1,1,  2,2,  1,1,  2,2,  1,1,  /* c0 - c7 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* c8 - cf */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* d0 - d7 */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* d8 - df */
+1,1,  1,1,  2,2,  1,1,  2,2,  1,1,  2,2,  1,1,  /* e0 - e7 */
+2,2,  2,2,  3,3,  2,2,  2,2,  1,1,  2,2,  1,1,  /* e8 - ef */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1,  /* f0 - f7 */
+1,1,  1,1,  2,2,  1,1,  1,1,  0,1,  1,1,  0,1   /* f8 - ff */
+};
+
+/* ==================================================================== */
+/*                    Nombres topologiques en binaire                   */
+/* ==================================================================== */
+
+/* ==================================== */
+void top8(                     /* pour un objet en 8-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N,                       /* taille image */
+  int *t,
+  int *tb)                     /* resultats */
+/* ==================================== */
+{
+	register unsigned char * ptr = img+p;
+	register int v;
+
+        if ((p%rs==rs-1) || (p<rs) || (p%rs==0) || (p>=N-rs)) /* point de bord */
+	{
+          printf("ERREUR: top8: point de bord\n");
+          exit(0);
+	}
+
+	if ( *(ptr+1)   ) v=1; else v=0;
+ 	if ( *(ptr+1-rs)) v|=2;
+ 	if ( *(ptr-rs)  ) v|=4;
+ 	if ( *(ptr-rs-1)) v|=8;
+ 	if ( *(ptr-1)   ) v|=16;
+ 	if ( *(ptr-1+rs)) v|=32;
+ 	if ( *(ptr+rs)  ) v|=64;
+ 	if ( *(ptr+rs+1)) v|=128;
+
+	*tb=TopoTab[v][0];
+	*t=TopoTab[v][1];
+} /* top8() */
+
+/* ==================================== */
+void top4(                     /* pour un objet en 4-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N,                       /* taille image */
+  int *t,
+  int *tb)                     /* resultats */
+/* ==================================== */
+{
+	register unsigned char * ptr = img+p;
+	register int v;
+
+        if ((p%rs==rs-1) || (p<rs) || (p%rs==0) || (p>=N-rs)) /* point de bord */
+	{
+          printf("ERREUR: top4: point de bord\n");
+          exit(0);
+	}
+
+	if ( *(ptr+1)   ) v=1; else v=0;
+ 	if ( *(ptr+1-rs)) v|=2;
+ 	if ( *(ptr-rs)  ) v|=4;
+ 	if ( *(ptr-rs-1)) v|=8;
+ 	if ( *(ptr-1)   ) v|=16;
+ 	if ( *(ptr-1+rs)) v|=32;
+ 	if ( *(ptr+rs)  ) v|=64;
+ 	if ( *(ptr+rs+1)) v|=128;
+        v = ~v & 0xff;
+
+	*t=TopoTab[v][0];
+	*tb=TopoTab[v][1];
+} /* top4() */
+
+/* ==================================== */
+int simple8(                   /* pour un objet en 8-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N)                       /* taille image */
+/* ==================================== */
+{
+        int t, tb;
+        if ((p%rs==rs-1) || (p<rs) || (p%rs==0) || (p>=N-rs)) return(0);
+        top8(img, p, rs, N, &t, &tb);
+        return (t == 1) && (tb == 1);
+} /* simple8() */
+
+/* ==================================== */
+int simple4(                   /* pour un objet en 4-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N)                       /* taille image */
+/* ==================================== */
+{
+        int t, tb;
+        if ((p%rs==rs-1) || (p<rs) || (p%rs==0) || (p>=N-rs)) return(0);
+        top4(img, p, rs, N, &t, &tb);
+        return (t == 1) && (tb == 1);
+} /* simple4() */

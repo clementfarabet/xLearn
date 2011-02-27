@@ -1,0 +1,24 @@
+extern void top8(                     /* pour un objet en 8-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N,                       /* taille image */
+  int *t,
+  int *tb);                     /* resultats */
+extern void top4(                     /* pour un objet en 4-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N,                       /* taille image */
+  int *t,
+  int *tb);                     /* resultats */
+extern int simple8(                   /* pour un objet en 8-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N);                       /* taille image */
+extern int simple4(                   /* pour un objet en 4-connexite */
+  unsigned char *img,          /* pointeur base image */
+  int p,                       /* index du point */
+  int rs,                      /* taille rangee */
+  int N);                       /* taille image */
