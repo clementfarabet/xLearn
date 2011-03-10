@@ -49,12 +49,16 @@ set(all_backends mega)
 # Backend: libdc1394 ---------------------------------
 
 # Method A: Check for libdc1394 using pkg-config (preferred)
-pkg_check_modules(DC1394 libdc1394-2)
+#pkg_check_modules(DC1394 libdc1394-2)
 
 # Method B: Check for libdc1394 ourselves without pkg-config (e.g. on Mac)
-IF(NOT DC1394_FOUND)
-  FIND_PACKAGE(DC1394)
-ENDIF(NOT DC1394_FOUND)
+
+# IF(NOT DC1394_FOUND)
+#   FIND_PACKAGE(DC1394)
+#   MESSAGE(${DC1394_INCLUDE_DIR})
+#   MESSAGE(${DC1394_LIBRARY})
+# ENDIF(NOT DC1394_FOUND)
+
 
 IF(DC1394_FOUND)
   set(all_backends ${all_backends} dc1394)
