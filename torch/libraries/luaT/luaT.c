@@ -503,8 +503,7 @@ int luaT_lua_newmetatable(lua_State *L)
   if(!lua_isnoneornil(L, 2))
   {
     if(lua_getmetatable(L, -1))
-      luaL_error(L, "class %s has been already assigned a parent class\n", tname);
-    else
+      printf("warning: re-registering parent for class %s\n", tname);
     {
       const char* parenttname = luaL_checkstring(L, 2);
       luaT_pushmetaclass(L, luaT_typename2id(L, parenttname));
@@ -601,15 +600,12 @@ int luaT_lua_newmetatable(lua_State *L)
     lua_pushstring(L, "__factory");
     lua_rawget(L, -2);
 
-    if(lua_isnil(L, -1))
-    {
-      lua_pop(L, 1); /* pop nil */
-      lua_pushstring(L, "__factory");
-      lua_pushvalue(L, 5);
-      lua_rawset(L, -3);
-    }
-    else
-      luaL_error(L, "%s has been already assigned a factory", tname);
+    if(!lua_isnil(L, -1)) printf("warning: re-registering factory for class %s\n", tname);
+
+    lua_pop(L, 1); /* pop nil */
+    lua_pushstring(L, "__factory");
+    lua_pushvalue(L, 5);
+    lua_rawset(L, -3);
   }
 
   /******** Constructor table and metatable ********/
@@ -652,15 +648,12 @@ int luaT_lua_newmetatable(lua_State *L)
     lua_pushstring(L, "__new");
     lua_rawget(L, -2);
 
-    if(lua_isnil(L, -1))
-    {
-      lua_pop(L, 1); /* pop nil */
-      lua_pushstring(L, "__new");
-      lua_pushvalue(L, 3);
-      lua_rawset(L, -3);
-    }
-    else
-      luaL_error(L, "%s has been already assigned a constructor", tname);
+    if(!lua_isnil(L, -1)) printf("warning: re-registering constructor for class %s\n", tname);
+
+    lua_pop(L, 1); /* pop nil */
+    lua_pushstring(L, "__new");
+    lua_pushvalue(L, 3);
+    lua_rawset(L, -3);
 
     /* pop constructor metatable */
     lua_pop(L, 1);
