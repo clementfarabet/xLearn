@@ -16,6 +16,7 @@ USE_MINCUT=1
 USE_LUAJIT=0
 USE_THREAD=1
 USE_BIT=1
+DOC=1
 EXPORT=xLearn-beta
 
 UNAME := $(shell uname)
@@ -34,6 +35,8 @@ help:
 	@-echo "options:"
 	@-echo "  INSTALL_PREFIX=/path/to/install/dir [current = /usr/local]"
 	@-echo "  EXPORT=filename  [current=xLearn-beta]"
+	@-echo ""
+	@-echo "  DOC=0|1           [current=${DOC}]   ? makes Documentation"
 	@-echo ""
 	@-echo "  USE_OPENCV=1|0    [current="${USE_OPENCV}"]   ? OpenCV 2.x Lua wrapper (Linux webcam), requires OpenCV 2.x"
 	@-echo "  USE_V4L2=1|0      [current="${USE_V4L2}"]   ? video4linux2 Lua wrapper (Linux webcam), requires V4L2"
@@ -76,7 +79,7 @@ help:
 
 build: camiface luajit
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=0 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_vlfeat=${USE_VLFEAT} -DWITH_CONTRIB_pink=${USE_PINK} -DWITH_CONTRIB_Kinect=${USE_KINECT} -DWITH_CONTRIB_mincut=${USE_MINCUT} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=${DOC} -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_vlfeat=${USE_VLFEAT} -DWITH_CONTRIB_pink=${USE_PINK} -DWITH_CONTRIB_Kinect=${USE_KINECT} -DWITH_CONTRIB_mincut=${USE_MINCUT} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
 	@-echo ""
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "Build succesful, install with admin rights (in /usr/local):"
@@ -113,20 +116,30 @@ ifeq (${USE_XFLOW},1)
 endif
 
 extrabins:
-	@-echo "qlua -ide -lXLearn -i" ${INSTALL_PREFIX}"/share/lua/5.1/XLearn/luaX.lua" > ${INSTALL_PREFIX}"/bin/luaX"
+	@-echo "qlua -ide -i" ${INSTALL_PREFIX}"/share/lua/5.1/XLearn/luaX.lua" > ${INSTALL_PREFIX}"/bin/luaX"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/luaX"
-	@-echo "qlua -lXLearn" > ${INSTALL_PREFIX}"/bin/xlua"
+	@-echo "qlua -lXLearn $1" > ${INSTALL_PREFIX}"/bin/xlua"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/xlua"
 	@-cp "packages/debugger/luaD" ${INSTALL_PREFIX}"/bin/luaD"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/luaD"
 
-install: build ixflow extrabins
-	@-cd torch/scratch && make install
-ifeq (${USE_CAMIFACE},1)
-ifeq (${UNAME},Darwin)
-	@-cd camiface/scratch && make install
-endif
-endif
+install: installLua installLuaDoc report
+	@-echo ${INSTALL_PREFIX} > torch/scratch/PREFIX
+
+installLuarock:
+	@-echo "+++ installing luarock +++"
+	cd luarocks && ./configure && make && make install PREFIX=${INSTALL_PREFIX}
+
+installLuaDoc: installLuarock
+	luarocks install luadoc
+
+doc: force
+	@-echo "+++ generating documentation +++"
+	cd doc && ./gendoc.lua *
+
+force: ;
+
+report:
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "Install complete, you should have access to:"
 	@-echo "lua (plain/original Lua interpreter)"
@@ -140,6 +153,14 @@ endif
 	@-echo "xlua (qlua + preloaded XLearn)"
 	@-echo "luaX (gui/matlab-like environment)"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+
+installLua: build ixflow extrabins	
+	@-cd torch/scratch && make install
+ifeq (${USE_CAMIFACE},1)
+ifeq (${UNAME},Darwin)
+	@-cd camiface/scratch && make install
+endif
+endif
 
 update:
 	@-echo "+++ updating install +++"
@@ -181,14 +202,20 @@ endif
 	@-rm -rf ${EXPORT}
 	@-echo "+++ export complete +++"
 
-clean:
+cleandoc:
+	@-echo "+++ cleaning doc +++"
+	@-rm -rf doc/*html doc/files doc/*.css doc/modules
+	@-echo "+++ cleanup doc done +++"
+
+clean: 
 	@-echo "+++ cleaning up +++"
 	@-rm -rf torch/scratch
 	@-cd luajit-torch; make clean
+	@-cd luarocks; make clean
 	@-rm -rf camiface/scratch
 	@-echo "+++ cleanup done +++"
 
-cleanall:
+cleanall: cleandoc
 	@-echo "+++ deep cleanup +++"
 	@-rm -rf trained-nets
 	@-rm -rf datasets
@@ -205,3 +232,29 @@ cleanall:
 	@-cd luajit-torch; make clean
 	@-rm -rf camiface/scratch
 	@-echo "+++ deep cleanup done +++"
+
+INSTALLED := $(shell if [ -f torch/scratch/PREFIX ]; then cat torch/scratch/PREFIX; fi;) \
+
+uninstall: 
+	@-if test -f torch/scratch/PREFIX; then\
+		echo --- uninstalling ---; \
+		rm -rf `cat torch/scratch/PREFIX`/share/lua;\
+		rm -rf `cat torch/scratch/PREFIX`/share/luajit*;\
+		rm -rf `cat torch/scratch/PREFIX`/lib/lua;\
+		rm -rf `cat torch/scratch/PREFIX`/lib/luarocks;\
+		rm -rf `cat torch/scratch/PREFIX`/lib/liblua*;\
+		rm -rf `cat torch/scratch/PREFIX`/lib/libqlua*;\
+		rm -rf `cat torch/scratch/PREFIX`/lib/libqtlua*;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/lua;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/luac;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/luaD;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/luadoc;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/luajit*;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/luarocks*;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/luaX;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/qlua;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/summary.lua;\
+		rm -rf `cat torch/scratch/PREFIX`/bin/xlua;\
+	else\
+		echo  --- not PREFIX file, installation was not completed properly ---;\
+	fi
