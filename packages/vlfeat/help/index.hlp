@@ -1,0 +1,8 @@
+VLFeat Package Reference Manual
+
+This is a wrapper around the VLFeat library. It provides several recent vision algorithms: SIFT, Dense SIFT, Quick Shift, ...
+
+Original library: [[http://www.vlfeat.org/overview/tut.html][==VLFeat==]]
+
+---+ Classes
+---+ Functions

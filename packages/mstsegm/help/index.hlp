@@ -1,0 +1,17 @@
+Graph-Based Segmentation Package Reference Manual
+
+This package is a wrapper around the graph-based (MST)
+image segmentation algorithm provided/published by Pedro Felzenszwalb:
+
+Efficient Graph-Based Image Segmentation
+Pedro F. Felzenszwalb and Daniel P. Huttenlocher
+International Journal of Computer Vision, 59(2) September 2004.
+
+It also contains lots of additional functions to segment volumes, images
+of features; and additional tools to manipulate, compute min spanning
+trees.
+
+[[http://people.cs.uchicago.edu/~pff/segment/][==Original Code==]]
+
+---+ Classes
+---+ Functions

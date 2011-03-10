@@ -1,0 +1,664 @@
+XLearn, Extension Packages Reference Manual [nn,image,toolBox]
+
+XLearn provides extension to Torch 5 original packages.
+In particular, it provides new nn.Modules, new learning algorithms, lots of tools that extends the image package, and a toolBox that provides, well, all sort of tools.
+
+---+ nn.Modules
+
+---+++ =LocalNorm=
+
+<verbatim>
+module = nn.LocalNorm()
+</verbatim>
+
+Performs a local normalization with threshold and no loss in dimensions.
+
+
+---+++ =LocalConnected=
+
+<verbatim>
+module = nn.LocalConnected()
+</verbatim>
+
+A spetial kind of SpatialConvolution module, where the the kernels are less replicated.
+
+
+---+++ =AbsModule=
+
+<verbatim>
+module = nn.AbsModule()
+</verbatim>
+
+A simple module that applies a point wise absolute value function
+to all elements of the input. 
+
+<verbatim>
+input = lab.rand(10)-0.5
+module = nn.AbsModule()
+output = module:forward(input)
+
+gradOut = lab.ones(10)
+gradIn = module:backward(input,gradOut)
+
+print(input)
+print(output)
+print(gradIn)
+
+
+</verbatim>
+
+produces the following output
+
+<verbatim>
+
+> print(input)
+
+-0.1338
+ 0.4053
+ 0.2052
+ 0.2978
+ 0.0772
+ 0.4844
+-0.3777
+-0.3074
+ 0.3447
+ 0.4270
+[torch.Tensor of dimension 10]
+
+> print(output)
+
+ 0.1338
+ 0.4053
+ 0.2052
+ 0.2978
+ 0.0772
+ 0.4844
+ 0.3777
+ 0.3074
+ 0.3447
+ 0.4270
+[torch.Tensor of dimension 10]
+
+> print(gradIn)
+
+-1
+ 1
+ 1
+ 1
+ 1
+ 1
+-1
+-1
+ 1
+ 1
+[torch.Tensor of dimension 10]
+
+</verbatim>
+
+---+++ =SpatialConvolutionTable=
+
+<verbatim>
+ct = nn.SpatialConvolutionTable:FullTable(nInputPlane, nOutputPlane)
+module = nn.SpatialConvolutionTable(ct, kW, kH, [dW], [dH])
+</verbatim>
+
+This module is very similar to =SpatialConvolution= module. It also
+applies a 2D convolution over an input image composed of several input
+planes. The =input= tensor in =forward(input)= is expected to be a 3D
+tensor (=width x height x nInputPlane=).
+
+The parameters are the following:
+   $ =ct=: A connection table (details below)
+   $ =kW=: The kernel width of the convolution
+   $ =kH=: The kernel height of the convolution
+   $ =dW=: The step of the convolution in the width dimension. Default is =1=.
+   $ =dH=: The step of the convolution in the height dimension. Default is =1=.
+
+The connection table =ct= has to be a =torch.Tensor= of size (=Nkernel x 2=). 
+ Each row of the connection table defines a single kernel that
+is applied on one input plane and accumulated on an output plane. The
+first column is the index of the input plane and second column is the
+index of the output plane. For example, an fully connected convolution
+layer (same as =SpatialConvolution=) has (=nInputPlane x nOutputPlane=) kernels.
+
+Three convenience methods are provided for easy creation of conection tables:
+   $ =nn.SpatialConvolutionTable:FullTable(nInputPlane, nOutputPlane)=: creates a connection table same as the =SpatialConvolution=.
+   $ =nn.SpatialConvolutionTable:OneToOneTable(nInputPlane)=: creates a connection table where the number of output planes is the same as the number of input planes and each output plane is connected to only the corresponding single input plane.
+   $ =nn.SpatialConvolutionTable:RandomTable(nInputPlane,nOutputPlane,nOutputConnections)=: creates a random connection table, where each one of the output planes is connected to a randomly selected =nOutputConnections= of input planes.
+
+
+---+++ =SpatialMaxPooling=
+
+<verbatim>
+module = nn.SpatialMaxPooling(kW, kH, [dW], [dH])
+</verbatim>
+
+This module is similar to =nn.SpatialSubSampling= class. Each input map is sampled by a max pooling operation. Each max pooling region is defined by =kW x kH=. The max pooling regions are stepped in row and column directions by =dW= and =dH=.
+
+<verbatim>
+
+input = lab.rand(3,3,2)*2-1
+
+m = nn.SpatialMaxPooling(2,2)
+
+output = m:forward(input)
+
+
+for i=1,2 do print(input:select(3,i)) end
+
+-0.5002 -0.1839  0.4455
+ 0.8065 -0.1115 -0.9732
+ 0.1438 -0.8206 -0.3678
+[torch.Tensor of dimension 3x3]
+
+
+ 0.6541 -0.3278  0.2088
+-0.7703  0.6197  0.2583
+-0.4189  0.4492  0.9606
+[torch.Tensor of dimension 3x3]
+
+for i=1,2 do print(output:select(3,i)) end
+
+ 0.8065  0.4455
+ 0.8065 -0.1115
+[torch.Tensor of dimension 2x2]
+
+
+ 0.6541  0.6197
+ 0.6197  0.9606
+[torch.Tensor of dimension 2x2]
+
+</verbatim>
+
+The output contains the maximum entry in each =2 x 2= region from input.
+
+---+++ =CAddTable=
+
+<verbatim>
+module = nn.CAddTable()
+</verbatim>
+
+This module expects a table of torch tensors as input and calculates
+pointwise sum of all tensors. The shape of the tensors are not
+important, but the number of elements has to be same. The output will
+the same shape as the first tensor in the input table.
+
+<verbatim>
+in1 = torch.Tensor(2,5):fill(3)
+in2 = torch.Tensor(5,2):fill(4)
+in3 = torch.Tensor(1,10):fill(5)
+mod = nn.CAddTable()
+out = mod:forward({in1,in2,in3})
+
+=in1
+
+ 3  3  3  3  3
+ 3  3  3  3  3
+[torch.Tensor of dimension 2x5]
+
+=in2
+
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+[torch.Tensor of dimension 5x2]
+
+=in3
+
+ 5  5  5  5  5  5  5  5  5  5
+[torch.Tensor of dimension 1x10]
+
+=out
+
+ 12  12  12  12  12
+ 12  12  12  12  12
+[torch.Tensor of dimension 2x5]
+
+
+</verbatim>
+
+---+++ =CSubTable=
+
+<verbatim>
+module = nn.CSubTable()
+</verbatim>
+
+This module expects a table with two tensors as input and performs a
+pointwise subtraction of the second one from the first one. The shape
+of the tensors are not important, but the number of elements has to be
+same. The output will the same shape as the first tensor in the input
+table.
+
+<verbatim>
+in1 = torch.Tensor(2,5):fill(3)
+in2 = torch.Tensor(5,2):fill(4)
+mod = nn.CSubTable()
+out = mod:forward({in1,in2})
+
+=in1
+
+ 3  3  3  3  3
+ 3  3  3  3  3
+[torch.Tensor of dimension 2x5]
+
+=in2
+
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+[torch.Tensor of dimension 5x2]
+
+=out
+
+-1 -1 -1 -1 -1
+-1 -1 -1 -1 -1
+[torch.Tensor of dimension 2x5]
+
+</verbatim>
+
+
+---+++ =CMulTable=
+
+<verbatim>
+module = nn.CMulTable()
+</verbatim>
+
+This module expects a table of torch tensors as input and calculates
+pointwise multiplication of all tensors. The shape of the tensors are not
+important, but the number of elements has to be same. The output will
+the same shape as the first tensor in the input table.
+
+<verbatim>
+in1 = torch.Tensor(2,5):fill(3)
+in2 = torch.Tensor(5,2):fill(4)
+in3 = torch.Tensor(1,10):fill(5)
+mod = nn.CMulTable()
+out = mod:forward({in1,in2,in3})
+
+=in1
+
+ 3  3  3  3  3
+ 3  3  3  3  3
+[torch.Tensor of dimension 2x5]
+
+=in2
+
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+[torch.Tensor of dimension 5x2]
+
+=in3
+
+ 5  5  5  5  5  5  5  5  5  5
+[torch.Tensor of dimension 1x10]
+
+=out
+
+ 60  60  60  60  60
+ 60  60  60  60  60
+[torch.Tensor of dimension 2x5]
+
+
+</verbatim>
+
+
+
+---+++ =CDivTable=
+
+<verbatim>
+module = nn.CDivTable()
+</verbatim>
+
+This module expects a table with two tensors as input and performs a
+pointwise division of the first one by the second one. The shape of
+the tensors are not important, but the number of elements has to be
+same. The output will the same shape as the first tensor in the input
+table.
+
+<verbatim>
+in1 = torch.Tensor(2,5):fill(12)
+in2 = torch.Tensor(5,2):fill(4)
+mod = nn.CDivTable()
+out = mod:forward({in1,in2})
+
+=in1
+
+ 12  12  12  12  12
+ 12  12  12  12  12
+[torch.Tensor of dimension 2x5]
+
+=in2
+
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+ 4  4
+[torch.Tensor of dimension 5x2]
+
+=out
+
+ 3  3  3  3  3
+ 3  3  3  3  3
+[torch.Tensor of dimension 2x5]
+
+</verbatim>
+
+
+---+++ =Power=
+
+<verbatim>
+module = nn.Power(pow)
+</verbatim>
+
+This module will raise each element of input to its power =pow=
+<verbatim>
+input = torch.Tensor(2,5):fill(2)
+mod = nn.Power(2.5)
+out = mod:forward(input)
+
+=input
+
+ 2  2  2  2  2
+ 2  2  2  2  2
+[torch.Tensor of dimension 2x5]
+
+=out
+
+ 5.6569  5.6569  5.6569  5.6569  5.6569
+ 5.6569  5.6569  5.6569  5.6569  5.6569
+[torch.Tensor of dimension 2x5]
+
+</verbatim>
+
+---+++ =Square=
+
+<verbatim>
+module = nn.Square()
+</verbatim>
+
+This module will compute the square of each element of =input=.
+
+<verbatim>
+input = torch.Tensor(2,5):fill(2)
+mod = nn.Square()
+out = mod:forward(input)
+
+=input
+
+ 2  2  2  2  2
+ 2  2  2  2  2
+[torch.Tensor of dimension 2x5]
+
+=out
+
+ 4  4  4  4  4
+ 4  4  4  4  4
+[torch.Tensor of dimension 2x5]
+
+</verbatim>
+
+---+++ =Sqrt=
+
+<verbatim>
+module = nn.Sqrt()
+</verbatim>
+
+This module will compute the square root of each element of =input=.
+
+<verbatim>
+input = torch.Tensor(2,5):fill(2)
+mod = nn.Sqrt()
+out = mod:forward(input)
+
+=input
+
+ 2  2  2  2  2
+ 2  2  2  2  2
+[torch.Tensor of dimension 2x5]
+
+=out
+
+ 1.4142  1.4142  1.4142  1.4142  1.4142
+ 1.4142  1.4142  1.4142  1.4142  1.4142
+[torch.Tensor of dimension 2x5]
+
+</verbatim>
+
+
+---+++ =Threshold=
+
+<verbatim>
+module = nn.Threshold(threshold,val)
+</verbatim>
+
+This module will apply thresholding operation on the =input=. Any
+value of =input= that is smaller than or equal to =threshold= will be
+replaced with =val=. The default values for =threshold= and =val= are
+both zero.
+
+<verbatim>
+i=0
+input = torch.Tensor(10):apply(function () i=i+1; return (i-1)/5 end)
+mod = nn.Threshold(1,0)
+out = mod:forward(input)
+
+=input
+
+ 0.0000
+ 0.2000
+ 0.4000
+ 0.6000
+ 0.8000
+ 1.0000
+ 1.2000
+ 1.4000
+ 1.6000
+ 1.8000
+[torch.Tensor of dimension 10]
+
+=out
+
+ 0.0000
+ 0.0000
+ 0.0000
+ 0.0000
+ 0.0000
+ 0.0000
+ 1.2000
+ 1.4000
+ 1.6000
+ 1.8000
+[torch.Tensor of dimension 10]
+
+
+
+</verbatim>
+
+
+---+++ =Replicate=
+
+<verbatim>
+module = nn.Replicate(nrep)
+</verbatim>
+
+This module will create replicas (not copies) of the input, by adding
+one more dimension of size =nrep= as the last dimension. If the input
+is =2x2= and =nrep= is =10=, the output will be =2x2x10=.
+
+<verbatim>
+i=1
+input = torch.Tensor(3,3):apply(function () i=i+1; return i end)
+mod = nn.Replicate(5)
+out = mod:forward(input)
+
+=input
+
+  2   5   8
+  3   6   9
+  4   7  10
+[torch.Tensor of dimension 3x3]
+
+
+for k=1,out:size(3) do print(out:select(3,k)) end
+
+  2   5   8
+  3   6   9
+  4   7  10
+[torch.Tensor of dimension 3x3]
+
+
+  2   5   8
+  3   6   9
+  4   7  10
+[torch.Tensor of dimension 3x3]
+
+
+  2   5   8
+  3   6   9
+  4   7  10
+[torch.Tensor of dimension 3x3]
+
+
+  2   5   8
+  3   6   9
+  4   7  10
+[torch.Tensor of dimension 3x3]
+
+
+  2   5   8
+  3   6   9
+  4   7  10
+[torch.Tensor of dimension 3x3]
+
+</verbatim>
+
+Modifiying one of the elements of input, accordingly modifes all
+elements in corresponding place of output.
+
+<verbatim>
+
+input[2][2] = 4.1
+=input
+
+  2.0000   5.0000   8.0000
+  3.0000   4.1000   9.0000
+  4.0000   7.0000  10.0000
+[torch.Tensor of dimension 3x3]
+
+
+for k=1,out:size(3) do print(out:select(3,k)) end
+
+  2.0000   5.0000   8.0000
+  3.0000   4.1000   9.0000
+  4.0000   7.0000  10.0000
+[torch.Tensor of dimension 3x3]
+
+
+  2.0000   5.0000   8.0000
+  3.0000   4.1000   9.0000
+  4.0000   7.0000  10.0000
+[torch.Tensor of dimension 3x3]
+
+
+  2.0000   5.0000   8.0000
+  3.0000   4.1000   9.0000
+  4.0000   7.0000  10.0000
+[torch.Tensor of dimension 3x3]
+
+
+  2.0000   5.0000   8.0000
+  3.0000   4.1000   9.0000
+  4.0000   7.0000  10.0000
+[torch.Tensor of dimension 3x3]
+
+
+  2.0000   5.0000   8.0000
+  3.0000   4.1000   9.0000
+  4.0000   7.0000  10.0000
+[torch.Tensor of dimension 3x3]
+
+
+</verbatim>
+
+
+
+---+++ =ContrastNormalization=
+
+<verbatim>
+module = nn.ContrastNormalization(kernel,nfeatures)
+</verbatim>
+
+This module implements a local contrast normalization operation. =nfeatures= is the number
+of feature maps that are input to this layer. =kernel= is a 2D torch.Tensor that will be used
+to compute mean an standard deviation of the feature maps.
+
+For each i,j spatial point in all feature maps, the weighted mean and standard deviation 
+is calculated using a spatial region, whose size is defined by the size of input =kernel=, 
+and weighted by the =kernel= too. Every point in all feature maps are then made zero mean and
+divided by the standard deviation.
+
+<verbatim>
+
+ker = torch.Tensor(7,7):fill(1/49)
+input = lab.rand(20,20,3)
+m = nn.ContrastNormalization(3,ker)
+out = m:forward(input)
+
+</verbatim>
+
+This module can be used together with AbsModule in regular convolutional nets as an alternative 
+transfer function.
+
+<verbatim>
+
+m = nn.Sequential()
+m:add(nn.SpatialConvolution(1,10),5,5)
+m:add(nn.HardTanh())
+m:add(nn.AbsModule())
+ker = torch.Tensor(7,7):fill(1/49)
+m:add(nn.ContrastNormalization(10,ker)
+
+</verbatim>
+
+
+
+---+ nn.Deciders
+
+---+++ =Decider=
+
+<verbatim>
+module = nn.Decider()
+</verbatim>
+
+An abstract class to represent deciders, or more generally modules that process outputs of nn.Modules.
+
+
+
+---+++ =ParzenDecider=
+
+<verbatim>
+module = nn.ParzenDecider()
+</verbatim>
+
+Implements Parzen windows to divide a space. 
+
+
+
+
+---+ Tools
+
+---+++ =toolBox=
+
+---+++ =imageBox=
+
+---+++ =dataSet=
+
+---+++ =camera=

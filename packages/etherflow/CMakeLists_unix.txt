@@ -1,0 +1,15 @@
+SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/contrib/etherflow
+                      ${CMAKE_MODULE_PATH})
+
+SET(src etherflow.c
+	etherflow.h) 
+SET(luasrc init.lua) 
+
+FIND_PACKAGE(PCAP)
+IF(PCAP_FOUND)
+   
+   INCLUDE_DIRECTORIES (${PCAP_INCLUDE_DIRS})
+   LINK_DIRECTORIES (${PCAP_LIBRARIES})
+   ADD_TORCH_PACKAGE(etherflow "${src}" "${luasrc}")
+   TARGET_LINK_LIBRARIES(etherflow luaT TH ${PCAP_LIBRARIES})
+ENDIF(PCAP_FOUND)

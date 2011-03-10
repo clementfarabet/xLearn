@@ -1,0 +1,14 @@
+Mathematical Morphology Package Reference Manual
+
+A wrapper around several functions from the Pink library (developed and maintained at ESIEE, Paris).
+
+Copyright ESIEE (2009,2010) 
+
+Michel Couprie (m.couprie@esiee.fr)
+Camille Couprie (c.couprie@esiee.fr)
+Hugues Talbot (h.talbot@esiee.fr)
+Leo Grady (leo.grady@siemens.com)
+Laurent Najman (l.najman@esiee.fr)
+
+---+ Classes
+---+ Functions
