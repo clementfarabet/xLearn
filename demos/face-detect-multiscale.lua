@@ -4,10 +4,13 @@
 --       the image source must be provided on the command line.
 --
 require 'XLearn'
+require 'NeuFlow'
 require 'os'
 
 -- parse args
 op = OptionParser('%prog -s SOURCE [options]')
+op:add_option{'-n', '--network', action='store', dest='network', 
+              help='path to existing [trained] network'}
 op:add_option{'-s', '--source', action='store', dest='source', 
               help='image source, can be one of: camera | lena'}
 op:add_option{'-c', '--camera', action='store', dest='camidx', 
@@ -29,7 +32,7 @@ local source = nn.ImageSource{type = options.source or 'camera',
 
 -- retrieve trained network
 convnet = nn.Sequential()
-file = torch.DiskFile('../trained-nets/network-face-detect', 'r')
+file = torch.DiskFile(options.network or '../trained-nets/network-face-detect', 'r')
 convnet:read(file)
 file:close()
 

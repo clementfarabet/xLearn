@@ -24,7 +24,7 @@ painter = qt.QtLuaPainter(widget.frame)
 
 -- params
 width = 320
-height = 240
+height = 180
 
 -- video source
 source = nn.ImageSource{type = options.source or 'camera',
@@ -74,7 +74,7 @@ function run()
    profiler:lap('compute-sift')
 
    profiler:start('render-sift')
-   sift_render = sift_render or torch.Tensor()
+   sift_render = sift_render or torch.Tensor(1,1)
    vlfeat.sift_display{image=frame, frames=sift_frames, descriptors=descriptors,
                        totensor=sift_render}
    if matches then
@@ -101,7 +101,7 @@ function run()
    profiler:lap('display')
 
    -- and params
-   painter:setfont(qt.QFont{serif=false,bold=true,italic=false,size=12})
+   painter:setfont(qt.QFont{family='Papyrus',serif=false,bold=true,italic=false,size=12})
    painter:moveto(500, frame:size(2)*2*zoom + 80); painter:show('edgeThresh = ' .. k)
    painter:moveto(500, frame:size(2)*2*zoom + 100); painter:show('peakThresh = ' .. pk)
 
