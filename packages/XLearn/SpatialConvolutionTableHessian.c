@@ -46,12 +46,12 @@ static int nn_SpatialConvolutionTableHessian_backwardHessian(lua_State *L) {
 
   /* Hold temporary squared input vector */
   THTensor_resizeAs(squaredInput, input);
-  THTensor_copy(input, squaredInput);
+  THTensor_copy(squaredInput, input);
   THTensor_cmul(squaredInput, squaredInput);
 
   /* Hold temporary squared weight vector */
   THTensor_resizeAs(squaredWeight, weight);
-  THTensor_copy(weight, squaredWeight);
+  THTensor_copy(squaredWeight, weight);
   THTensor_cmul(squaredWeight, squaredWeight);
 
   /* hessian wrt bias */

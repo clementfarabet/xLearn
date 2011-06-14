@@ -7,15 +7,11 @@ function Replicate:__init(nf)
 end
 
 function Replicate:forward(input)
-   --self.output:resize(input:size(1),input:size(2),self.nfeatures)
    local sz = torch.LongStorage(input:dim()):copy(input:size()):resize(input:dim()+1,true)
    sz[sz:size()] = self.nfeatures
    local st = torch.LongStorage(input:dim()):copy(input:stride()):resize(input:dim()+1,true)
    st[st:size()] = 0
-   self.output = torch.Tensor(input:storage(),input:storageOffset(),sz,st)
-   -- for k=1,self.output:size(3) do
-   --    self.output:select(3,k):copy(input)
-   -- end
+   self.output:set(input:storage(),input:storageOffset(),sz,st)
    return self.output
 end
 

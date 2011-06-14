@@ -66,6 +66,18 @@ function Concat:updateParameters(learningRate)
    end
 end
 
+function Concat:decayParameters(decay)
+   for i=1,#self.modules do
+      self.modules[i]:decayParameters(decay)
+   end
+end
+
+function Concat:empty()
+  for i=1,#self.modules do
+     self.modules[i]:empty()
+  end
+end
+
 function Concat:write(file)
    parent.write(self, file)
    file:writeObject(self.modules)

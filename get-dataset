@@ -1,104 +1,201 @@
 #!/bin/bash
 
+function usage {
+    echo "syntax:"
+    echo "  get-dataset dataset(s)"
+    echo "  dataset = all | faces | spanish | mnist | lagr | coil100 | stanford | flobject | barcelona | siftflow | middlebury-flow | middlebury-stereo "
+}
+
+# --------------- ARGS -----------------------------
 # Should give an arg
 if [ $# == 0 ]
 then
-    echo "syntax:"
-    echo "  get-dataset dataset"
-    echo "  dataset = faces | spanish | mnist | lagr | coil100"
+    usage
     exit
 fi
 
-mkdir -p datasets
-if which wget >/dev/null; then
-    if [ $1 == "faces" ] 
-    then
-        echo "Installing Faces Dataset"
-        TARNAME=faces_cut_yuv_32x32.tar.gz
-        cd datasets
-        rm -f $TARNAME
-        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
-        tar -xvf $TARNAME
-        rm -f $TARNAME
-        echo "Faces Dataset installed in datasets/"
-        exit
-    fi
-    if [ $1 == "spanish" ]
-    then
-        echo "Installing Spanish Dataset"
-        cd datasets
-        TARNAME=spanish_dataset.tar.gz
-        rm -f $TARNAME
-        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
-        tar -xvf $TARNAME
-        rm -f $TARNAME
-        echo "Spanish Dataset installed in datasets/"
-    fi
-    if [ $1 == "mnist" ]
-    then
-        echo "Installing MNIST Dataset"
-        cd datasets
-        TARNAME=mnist.tar.gz
-        rm -f $TARNAME
-        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
-        tar -xvf $TARNAME
-        rm -f $TARNAME
-        echo "MNIST Dataset installed in datasets/"
-    fi
-    if [ $1 == "lagr" ] 
-    then
-        echo "Installing LAGR Groundtruth test data"
-        TARNAME=lagr_groundtruth.tgz
-        cd datasets
-        rm -f $TARNAME
-        wget http://js1.cs.nyu.edu/clement/data/$TARNAME
-        tar -xvf $TARNAME
-        rm -f $TARNAME
-        echo "LAGR test data installed in datasets/"
-        exit
-    fi
-    if [ $1 == "coil100" ] 
-    then
-        echo "Installing COIL-100 data in datasets/"
-        TARNAME=coil-100.tar.gz
-        cd datasets
-        rm -f $TARNAME
-        wget http://www.cs.columbia.edu/CAVE/databases/SLAM_coil-20_coil-100/coil-100/$TARNAME
-        tar -xzvf $TARNAME
-        rm -f $TARNAME
-        cd  coil-100
-        mkdir test
-        mkdir train
-        # move the files into train and test folders accordingly
-        echo "Moving files..."
-        for j in {1..100}
-        do 
-            PJ=`printf "%03d" $j`
-            mkdir test/$PJ
-            mkdir train/$PJ
-            # copy the training data
-            for i in {0..3}
-            do
-                PI=`printf "%03d" $((90*i))`
-                mv obj$((j))__$((90*i)).ppm train/$PJ/obj${PJ}__${PI}.ppm
-            done
-            for i in {0..71}
-            do 
-                PI=`printf "%03d" $((5*i))`
-                f=obj$((j))__$((5*i)).ppm
-                if [ -e $f ]
-                then
-                    mv obj$((j))__$((5*i)).ppm test/$PJ/obj${PJ}__${PI}.ppm
-                fi
-            done
-        done
-        echo "COIL-100 test and train  data installed in datasets/"
-        exit
-    fi
+# allow for "all" keyword
+# all is getting crazy long
+if [ $1 == "all" ]
+then
+    DATASETS=(faces spanish mnist lagr coil100 stanford flobject barcelona siftflow middlebury-flow middlebury-stereo)
 else
+    DATASETS=$@
+fi
+
+if [ ! `which wget` ]
+then
     echo "wget couldn't be found. Install it with:"
     echo "sudo port install wget , then retry"
     echo "(or sudo apt-get install wget)"
+    exit
 fi
+
+# this is the default server
+SERVER=http://js1.cs.nyu.edu/clement/data/
+
+# --------------- FUNCS -----------------------------
+function get_tar {
+    rm -f $2
+    wget $1/$2
+    tar -xvf $2
+    rm -f $2
+}
+
+function check_dir {
+    pwd
+    echo checking $DIRNAME
+    if [ -e $DIRNAME ]
+    then
+	echo -n $DIRNAME "dir already exists do you want to download (Y/n)?"
+	read ans
+    else 
+	ans=Y
+    fi
+    case "$ans" in
+	[nN] | [n|N][O|o] ) 
+	    echo "skipping..." $DIRNAME
+	    ;;
+	*)
+	    get_tar $SERVER $TARNAME
+	    echo  $DIRNAME " installed in " $INSTALLDIR
+    esac		
+}
+
+# --------------- SCRIPT -----------------------------
+
+mkdir -p datasets
+cd datasets
+
+for dset in ${DATASETS[@]}
+do
+    case "$dset" in
+	"faces")
+	    echo "Installing Faces Dataset"
+	    TARNAME=faces_cut_yuv_32x32.tar.gz
+	    get_tar $SERVER $TARNAME
+	    echo "Faces Dataset installed in datasets/"
+	    ;;
+	"spanish")
+	    echo "Installing Spanish Dataset"
+	    TARNAME=spanish_dataset.tar.gz
+	    get_tar $SERVER $TARNAME
+	    echo "Spanish Dataset installed in datasets/"
+	    ;;
+	"stanford")
+	    echo "Installing Stanford (Gould) Dataset"
+	    TARNAME=stanford_dataset.tgz
+	    get_tar $SERVER $TARNAME
+	    echo "Stanford Dataset installed in datasets/"
+	    ;;
+	"siftflow")
+	    echo "Installing SiftFlow (Liu) Dataset"
+	    TARNAME=siftflow_dataset.tgz
+	    get_tar $SERVER $TARNAME
+	    echo "SiftFlow Dataset installed in datasets/"
+	    ;;
+	"barcelona")
+	    echo "Installing Barcelona (Lazebnik) Dataset"
+	    TARNAME=barcelona_dataset.tgz
+	    get_tar $SERVER $TARNAME
+	    echo "Stanford Barcelona installed in datasets/"
+	    ;;
+	"mnist")
+	    echo "Installing MNIST Dataset"
+	    TARNAME=mnist.tar.gz
+	    DIRNAME=mnist
+	    check_dir $SERVER $TARNAME $DIRNAME
+	    echo "MNIST Dataset installed in datasets/"
+	    ;;
+	"lagr")
+	    echo "Installing LAGR Groundtruth test data"
+	    TARNAME=lagr_groundtruth.tgz
+	    get_tar $SERVER $TARNAME
+	    echo "LAGR test data installed in datasets/"
+	    ;;
+	"coil100")
+	    echo "Installing COIL-100 data in datasets/"
+	    TARNAME=coil-100.tar.gz
+	    SERVER=http://www.cs.columbia.edu/CAVE/databases/SLAM_coil-20_coil-100/coil-100/
+	    DIRNAME=coil-100
+	    check_dir $SERVER $TARNAME $DIRNAME
+	    cd  $DIRNAME
+	    mkdir test
+	    mkdir train
+        # move the files into train and test folders accordingly
+	    echo "Moving files..."
+	    for j in {1..100}
+	    do 
+		PJ=`printf "%03d" $j`
+		mkdir test/$PJ
+		mkdir train/$PJ
+            # copy the training data
+		for i in {0..3}
+		do
+		    PI=`printf "%03d" $((90*i))`
+		    mv obj$((j))__$((90*i)).ppm train/$PJ/obj${PJ}__${PI}.ppm
+		done
+		for i in {0..71}
+		do 
+		    PI=`printf "%03d" $((5*i))`
+		    f=obj$((j))__$((5*i)).ppm
+		    if [ -e $f ]
+		    then
+			mv obj$((j))__$((5*i)).ppm test/$PJ/obj${PJ}__${PI}.ppm
+		    fi
+		done
+	    done
+	    cd - # go back to datasets
+	    echo "COIL-100 test and train  data installed in datasets/"
+	    ;;
+	"middlebury-flow")
+	    echo "Installing Middlebury flow dataset" 
+	    SERVER=http://greendotblade3.cs.nyu.edu/marco/data/
+	    TARNAME=middlebury-flow.tgz
+	    get_tar $SERVER $TARNAME
+	    echo "middlebury-flow installed in datasets/"
+	    ;; 
+	"middlebury-stereo")
+	    echo "Installing Middlebury stereo dataset" 
+	    SERVER=http://greendotblade3.cs.nyu.edu/marco/data/
+	    TARNAME=middlebury-stereo.tgz
+	    get_tar $SERVER $TARNAME
+	    echo "middlebury-stereo installed in datasets/"
+	    ;; 
+	"flobject")
+	    INSTALLDIR=flobjects
+
+	    # there is an issue with torch.Diskfiles which makes them
+	    # unreadable on different processors.  Until there is a
+	    # better fix I'll maintain 2 sets of tarballs
+
+	    if [ $(uname -p) == x86_64 ] 
+		then
+		TARNAMES=(CityCars_64bit.tar CityPedestrians_64bit.tar)
+	    else
+		TARNAMES=(CityCars_32bit.tar CityPedestrians_32bit.tar)
+	    fi
+	    DIRNAMES=${TARNAMES[@]%%.tar}
+	    SERVER=http://greendotblade3.cs.nyu.edu/marco/data/flobjects
+	    mkdir -p $INSTALLDIR
+	    cd $INSTALLDIR
+	    pwd
+	    for TARNAME in ${TARNAMES[@]}
+	    do
+		DIRNAME=`echo $TARNAME | sed 's/_[36][24]bit.tar//'`
+		echo "Installing flobject data " $DIRNAME
+		check_dir $SERVER $TARNAME $DIRNAME
+		# move CityCars_32bit to CityCars etc. 
+		echo moving ${TARNAME%%.tar} to $DIRNAME
+		mv ${TARNAME%%.tar} $DIRNAME
+	    done
+	    cd -
+	    ;;
+	*)
+	    echo ERROR $dset target does not exist
+	    usage
+	    ;;	    
+    esac
+done
 
 

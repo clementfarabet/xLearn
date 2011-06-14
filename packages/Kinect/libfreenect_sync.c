@@ -362,7 +362,7 @@ static int sync_get_both(void ***data, uint32_t *timestamp, int index)
   data[1] = dbuf->bufs[0] = dbuf->bufs[1];
   dbuf->bufs[1] = temp_buf;
   dbuf->valid = 0;
-  printf("diff timestamp:%d\n",(int)(*timestamp - dbuf->timestamp));
+  //printf("diff timestamp:%d\n",(int)(*timestamp - dbuf->timestamp));
   //*timestamp = dbuf->timestamp;
   pthread_mutex_unlock(&dbuf->lock);
 

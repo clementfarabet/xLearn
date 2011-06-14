@@ -67,6 +67,8 @@ function Linear:reset(stdv)
 end
 
 function Linear:forward(input)
+   self.gradInput:resizeAs(input)
+   self.output:resizeAs(self.bias)
    self.output:copy(self.bias)
    self.output:addT2dotT1(1, self.weight:t(), input)
    return self.output
@@ -93,6 +95,11 @@ end
 function Linear:updateParameters(learningRate)
    self.weight:add(-learningRate, self.gradWeight)
    self.bias:add(-learningRate, self.gradBias)
+end
+
+function Linear:decayParameters(decay)
+   self.weight:add(-decay, self.weight)
+   self.bias:add(-decay, self.bias)
 end
 
 function Linear:write(file)

@@ -28,6 +28,7 @@ do
       if fps and fps == 'fps' then
          self.events[name].fps = true
       end
+      if self.verbose then io.write('<' .. name .. '>') io.flush() end
    end
 
    function Profiler:setColor(name, color)
@@ -57,7 +58,7 @@ do
    function Profiler:lap(name,divider)
       local r = self:real(name,divider)
       local c = self:cpu(name,divider)
-      if self.verbose then self:print(name) end
+      if self.verbose then io.write('\r') self:print(name) end
       return r,c
    end
 
@@ -103,10 +104,11 @@ do
       local y = args.y or 0
       local zoom = args.zoom or 1
       local painter = args.painter
+      local font = args.font or 24*zoom
       if not painter then error('# ERROR: Profiler.displayAll() needs a painter') end
 
       
-      painter:setfont(qt.QFont{serif=false,italic=false,size=24*zoom})
+      painter:setfont(qt.QFont{serif=false,italic=false,size=font})
       if not self.off then
          for i = 1,#self.list do
             painter:setcolor(self.list[i].color or "black")
@@ -124,7 +126,7 @@ do
                                    self.list[i].name)               
             end
             -- disp line:
-            painter:moveto(x,y); y = y + 32*zoom
+            painter:moveto(x,y); y = y + font*1.5
             painter:show(str)
          end
       end

@@ -119,7 +119,7 @@
      <item row="1" column="3">
       <widget class="QSpinBox" name="spinBox_2">
        <property name="value">
-        <number>20</number>
+        <number>10</number>
        </property>
       </widget>
      </item>

@@ -1,0 +1,52 @@
+<extended>luaX: from Matlab to Lua
+
+Matlab users will probably find that the best way to get into =Lua= and =Torch5= 
+is by using =luaX=.
+
+---+ Run it
+
+If you managed to install everything properly ([[Install.hlp][here]]), with QT bindings,
+you should have access to =luaX=:
+<verbatim>
+$ luaX
+</verbatim>
+
+This opens a GUI, with all the =Torch5= and =xLearn= base libraries pre-loaded for you.
+=luaX= is a simple alias for:
+<verbatim>
+$ qlua -ide -i ${INSTALL_PREFIX}/share/lua/5.1/XLearn/luaX.lua
+</verbatim>
+
+---+ Basics
+
+At this stage, you should see two windows: the main one is the console, allowing
+you to enter Lua commands, and see your results in the main frame.
+
+The second one is similar to the global variable window in Malab: it shows all your
+global variables, their type, and possibly value. Some of these variables can be 
+displayed (images, [[../ffmpeg/index.html][Video]] objects, ...). In general, any 
+object that has a =__show()= variable can be displayed using the =display= button.
+
+The library tab shows which libraries are loaded, and which libraries are available.
+Some of them also have hyperlinks to their help page.
+
+---+ Simple Example
+
+A simple example of interaction with =luaX= (this requires a video file available).
+
+In the bottom part of the console:
+<verbatim>
+vid = Video('/path/to/video.mp4')
+</verbatim>
+
+At this stage, =vid= should have appeared in the variable window. Clicking on it will
+dump its internal variables in the main console, while clicking on the =display= button
+will play the video !
+
+Similarly, for images:
+
+<verbatim>
+test = image.load('someimage.png')
+</verbatim>
+
+Clicking on the =display= button will show the image.

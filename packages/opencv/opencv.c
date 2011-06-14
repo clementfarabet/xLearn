@@ -654,7 +654,7 @@ static int l_cvDrawFlowlinesOnImage (lua_State *L) {
 			    cvRound( THTensor_get2d(points1,i,1)));
       CvPoint p1 = cvPoint( cvRound( THTensor_get2d(points2,i,0)),
 			    cvRound( THTensor_get2d(points2,i,1)));
-      cvLine( image_ipl, p0, p1, color_cv, 1, CV_AA, 0);
+      cvLine( image_ipl, p0, p1, color_cv, 2, CV_AA, 0);
     }
   }
   // return results

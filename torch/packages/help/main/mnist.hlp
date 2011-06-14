@@ -1,0 +1,10 @@
+<extended>Training a neural net to recognize digits.
+
+To be documented.
+
+For now, simply checkout =demos/train-on-mnist.lua=. You can train in minutes:
+
+<verbatim>
+$ ./get-dataset mnist
+$ cd demos; qlua train-on-mnist.lua
+</verbatim>

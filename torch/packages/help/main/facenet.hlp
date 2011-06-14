@@ -1,0 +1,12 @@
+<extended>Training a neural net to detect faces.
+
+To be documented.
+
+For now, simply checkout =demos/train-on-faces.lua=. You can train in minutes:
+
+<verbatim>
+$ ./get-dataset faces
+$ cd demos; qlua train-on-faces.lua
+</verbatim>
+
+A result of that trainer is already provided in =trained-nets/network-face-detect=.

@@ -67,6 +67,7 @@ public:
 signals:
   void stateChanged(int state);
   void errorMessage(QByteArray message);
+  void evalDone();
 public slots:
   void setPrintResults(bool);
   void setPrintErrors(bool);
@@ -75,6 +76,7 @@ public slots:
   bool resume(bool nocontinue=false);
   bool eval(QByteArray s, bool async=false);
   bool eval(QString s, bool async=false);
+  void emitEvalDone() { emit evalDone(); }
   QVariantList evaluate(QByteArray s);
   QVariantList evaluate(QString s);
 public:

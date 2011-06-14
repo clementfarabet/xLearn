@@ -22,7 +22,11 @@
 #define LUA_CPATH_DEFAULT \
   ".\\?.dll;" LUA_CDIR"?.dll;" LUA_CDIR"loadall.dll"
 #else
+#ifdef LUA_XROOT
+#define LUA_ROOT	LUA_XROOT
+#else
 #define LUA_ROOT	"/usr/local/"
+#endif
 #define LUA_LDIR	LUA_ROOT "share/lua/5.1/"
 #define LUA_CDIR	LUA_ROOT "lib/lua/5.1/"
 #ifdef LUA_XROOT

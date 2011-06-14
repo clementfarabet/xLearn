@@ -1,0 +1,14 @@
+If you have the qt opengl extensions installed
+
+libqt-opengl-dev on ubuntu 
+
+This widget will be added to your installation automatically.
+
+then you can 
+
+require 'qtopengl'
+w=qt.QGLWidget()
+w:show()
+
+better examples are coming.
+

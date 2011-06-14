@@ -1,4 +1,4 @@
-<extended>Torch Manual
+<extended>Torch + xLearn Manual
 
 =Torch5= provides a Matlab-like environment for state-of-the-art machine
 learning algorithms. It is _easy_ to use and provides a very _efficient_
@@ -6,8 +6,46 @@ implementation, thanks to [[Lua.hlp][an easy and fast scripting language]]
 [[LuaManual.hlp][(=Lua=)]] and a underlying =C++= implementation. It is
 distributed under a [[License.hlp][=BSD= license]].
 
+=xLearn= extends Torch5 with lots of additional features, algorithms, 
+applications, demos, ...
+
+=xLearn= is used at our labs (NYU/Yale) to develop vision applications 
+(segmentation, machine learning, tracking, ...), and also to target our
+custom [[http://www.neuflow.org][=neuFlow=]] architecture.
+
+=xLearn= enriches Torch 5 by providing lots of extra packages, among which:
+
+   * =nn=: new neural net modules that extend the spectrum of NN architectures
+   * =toolBox, imageBox=: tool boxes to manipulate/display images
+   * =thread=: the Lua core is patched with LuaThread to allow multithreaded apps
+   * =LuaJIT=: the entire framework can be built against LuaJIT for improved performance
+   * =NeuFlow=: the compiler/toolkit for the NeuFlow architecture
+   * =luaFlow=: pre-beta code for the flow-based description language xFlow (much more about this soon)
+   * =opencv=: a wrapper for OpenCV, for now just a couple of functions, super easy to extend, provides a wrapper for webcams
+   * =debugger=: the open-source debugger framework for Lua
+   * =camiface=: a wrapper for libcamiface, to interface webcams on MacOS
+   * =video4linux=: a wrapper for libv4l2, to interface webcams in Linux
+   * =mstsegm=: a wrapper around P. Felzenszwalbs image segmentation lib
+   * =pink=: a wrapper around Couprie/Najman/Talbot/Coustys morphology library
+   * =powerwatersegm=: a wrapper around C. Coupries Powerwatershed library
+   * =stereo=: a wrapper around P. Felzenszwalbs BP-based stereo code
+   * =opticalFlow=: a wrapper around C. Lius great optical-flow estimator
+   * =vlfeat=: a wrapper around Andrea Vedaldi and Brian Fulkersons library
+   * =Kinnect=: a wrapper around the open source Kinnect library/SDK
+
+All these packages work together seamlessly, using Torch 5's Tensor as the basic building block (for ex. results given by the opticalFlow code from P. Felzenszwalb, can be easily piped into a ConvNet trained with the nn package, which turn, can be injected into other packages, similar to what can be done in Matlab... but completely free of course !!).
+
+The original Torch5 project and documentation is hosted [[http://torch5.sourceforge.net/][here]].
+Many thanks to [[http://ronan.collobert.com/][Ronan Collobert]], [[http://leon.bottou.org/][Leon Bottou]] and friends for having put together =Torch5= !
+
 ---+ Introduction
 
    * [[Install.hlp][Installation instructions]]
    * [[newbieTutorial.hlp][Basic tutorial for Torch newbies]]
+   * [[luaX.hlp][From Matlab to Lua]]
 
+---+ Demos
+
+   * [[mnist.hlp][Training a neural network to recognize hand-written digits]]
+   * [[facenet.hlp][Training a neural network to detect faces]]
+   * [[webcam.hlp][Running a trained neural network on your webcam]]

@@ -27,8 +27,14 @@ function ImageSource:__init(...)
       {arg='path', type='string', help='path to video, for source == video'}
    )
 
+  
+
+
    -- store args
-   self.camidx = idx
+   local defs = {...}
+   if(defs[3]) then
+      self.camidx = defs[3]--idx
+   else self.camidx = idx end
    self.nbuffers = nbuffers
    self.fps = fps
    self.length = length
@@ -127,4 +133,8 @@ end
 
 function ImageSource:read(file)
    parent.read(self, file)
+end
+
+function ImageSource:__show()
+   image.display(self:forward())
 end

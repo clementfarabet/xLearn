@@ -31,10 +31,7 @@ local source = nn.ImageSource{type = options.source or 'camera',
                               fps = 20}
 
 -- retrieve trained network
-convnet = nn.Sequential()
-file = torch.DiskFile(options.network or '../trained-nets/network-face-detect', 'r')
-convnet:read(file)
-file:close()
+convnet = nn.Sequential():readf('../trained-nets/network-face-detect')
 
 -- various transformers:
 rgb2y = nn.ImageTransform('rgb2y')

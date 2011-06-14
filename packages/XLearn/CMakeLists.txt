@@ -6,6 +6,7 @@ SET(src AbsModule.c
         SpatialConvolutionTable.c
         SpatialConvolutionTableHessian.c
         SpatialMaxPooling.c
+        SpatialReSampling.c
         SpatialSubSamplingHessian.c
         Threshold.c
         TanhHessian.c
@@ -21,6 +22,7 @@ SET(luasrc AbsModule.lua
            CDivTable.lua
            CMulTable.lua
            CSubTable.lua
+           ConfusionMatrix.lua
            ContrastNormalization.lua
            DataSet.lua
            DataSetLabelMe.lua
@@ -28,12 +30,15 @@ SET(luasrc AbsModule.lua
            Decider.lua
            Displayer.lua
            DrLimCriterion.lua
+	   EdgeCriterion.lua
+           Fovea.lua
            GaborLayer.lua
            ImageRescale.lua
            ImageTransform.lua
            ImageSource.lua
            LcDecoder.lua
            LcEncoder.lua
+           LocalGraph.lua
            CCAdd.lua
            CCSub.lua
            LocalConnected.lua
@@ -45,21 +50,32 @@ SET(luasrc AbsModule.lua
            OptionParser.lua
            ParzenDecider.lua
            Power.lua
+           RecursiveFovea.lua
+           RecursiveFoveaHessian.lua
            Replicate.lua
            xPrompt.lua
            luaX.lua
+           luaX.ui
            SequentialHessian.lua
            SpatialConvolutionTable.lua
            SpatialConvolutionTableHessian.lua
+           SpatialFovea.lua
            SpatialLinear.lua
            SpatialLinearHessian.lua
+           SpatialLogSoftMax.lua
            SpatialMaxPooling.lua
+           SpatialMSECriterion.lua
+           SpatialNLLCriterion.lua
            SpatialPadding.lua
+           SpatialPaddingHessian.lua
+           SpatialReSampling.lua
            SpatialSubSamplingHessian.lua
+           SpatialUpSampling.lua
            Sqrt.lua
            Square.lua
            StochasticTrainer.lua
            StochasticHessianTrainer.lua
+           SuperCriterion.lua
            TanhHessian.lua
            Threshold.lua
            Mult.lua
@@ -69,14 +85,14 @@ SET(luasrc AbsModule.lua
            Trainer.lua
            UnsupDataSet.lua
            imageBox.lua
+           imageWindow.ui
            init.lua
            lena.png
            table.lua
            toolBox.lua
            SparseCriterion.lua
-           Video.lua
            VideoDataSet.lua)
 
-ADD_TORCH_PACKAGE(XLearn "${src}" "${luasrc}")
+ADD_TORCH_PACKAGE(XLearn "${src}" "${luasrc}" "Machine Learning")
 
 TARGET_LINK_LIBRARIES(XLearn luaT TH)

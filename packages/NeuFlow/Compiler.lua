@@ -62,6 +62,19 @@ local layers_table = {
       function(net_compiler, module, inputs) 
          return net_compiler:LocalNorm(module, inputs)
       end,
+   
+   ["nn.LocalNorm_hardware_back"] = 
+      function(net_compiler, module, inputs) 
+         return net_compiler:LocalNorm(module, inputs)
+      end,
+
+
+   ["nn.Parallel"] = 
+      function(net_compiler, module, inputs) 
+	 print("NOTE: at this point, Parallel is only implemented for street scenes network")
+         return net_compiler:Parallel(module, inputs)
+      end,
+   
 
    ["nn.SpatialPadding"] =
       function(net_compiler, module, inputs) 
@@ -207,7 +220,8 @@ function Compiler:processNetwork(network, inputs)
       self.core:getTime()
       self.core:endProcess()
    end
-   print('# processing network or type >', network)
+   print('# processing network [type = ' .. torch.typename(network) .. ']:')
+   print(network.modules)
    local doneAdvance = 0
    local outputs
    for i=1,#network.modules do
@@ -852,19 +866,44 @@ function Compiler:LocalNorm(sub_module, inputs)
 
    -- get threshold
    local threshold = sub_module.fixedThres
-
-
-   -- local norm mean
-   self.core:localNormalizeMeanBank(input_maps, mean_kernels, zero_maps)
-   --self.core:localNormalizeMean(input_maps[1], mean_kernels[1], zero_maps[1])
    
-   -- do only zero mean
-   --self.core:localNormalizeMean(input_maps[1], mean_kernels[1], output_maps[1])
+   -- get coefs for mapping
+   local xN_coefs = {}
+   local sqrtCoefs = {}
+   if (sub_module.__typename == "nn.LocalNorm_hardware") then
+      xN_coefs = sub_module.xN_coefs
+      sqrtCoefs = sub_module.sqrtCoefs_no_pad
+   else
+      -- coefs for div by num of features
+      local xN = function (x) 
+                 return x / #mean_kernels
+              end
+      xN_coefs = math.approx_line{mapping=xN, min=num.min, max=num.max, odd = true,
+                                nbSegments=grid.mapper_segs, Q=num.frac_,
+                                verbose=true, a = 1/#mean_kernels, b = 0}
+
+   -- generate coefs for sqrt
+   local mapping
+      threshold = threshold or 1/256
+      if (threshold == 0) then threshold = 1/256 end
+      mapping = function (x) 
+		   x = x / #std_kernels
+		   if x < threshold then return math.sqrt(threshold)
+		   else return math.sqrt(x) end
+		end
+      sqrtCoefs = math.approx{mapping=mapping, min=0, max=num.max,
+			      nbSegments=grid.mapper_segs, Q=num.frac_,
+			      verbose=true, epsilon=25/256,error_type = 0,
+			      name = 'Sqrt_th_div_'..#std_kernels..'_s_'..threshold}
+      
+   end
+   
+   -- local norm mean
+   self.core:localNormalizeMeanBank(input_maps, mean_kernels, zero_maps, xN_coefs)
    
    -- local norm std
-   self.core:localNormalizeStdBank(zero_maps, std_kernels, output_maps, threshold)--2/256)
-   --self.core:localNormalizeStd(zero_maps[1], std_kernels[1], output_maps[1], 1/256)
-
+   self.core:localNormalizeStdBank(zero_maps, std_kernels, output_maps, sqrtCoefs)
+   
    -- for info, update the number of ops
    self.ops = self.ops + (output_w*output_h*kernel_w*kernel_h*2
                           + zerom_w*zerom_h*(kernel_w*kernel_h*2 + 16)) * sub_module.nfeatures
@@ -879,6 +918,47 @@ function Compiler:LocalNorm(sub_module, inputs)
    -- return output maps
    return outputs
 end
+
+function Compiler:Parallel(par_module, inputs)      
+   -- verbose
+   if (self.msg_level ~= 'none') then
+      self.core:startProcess()
+      self.core:message(string.format('PA')) 
+      self.core:endProcess()
+   end
+
+   -- timing info
+   if (self.msg_level == 'timing') then
+      self.core:startProcess()
+      self.core:resetTime()
+      self.core:endProcess()
+   end
+
+   local LN_input = {}
+   LN_input[1] = inputs[1]
+
+   local LN_output = self:LocalNorm(par_module.modules[1], LN_input)
+
+   local outputs = {}
+   
+   outputs[1] = LN_output[1]
+   outputs[2] = inputs[2]
+   outputs[3] = inputs[3]
+
+  
+   -- timing info
+   if (self.msg_level == 'timing') then
+      self.core:startProcess()
+      self.core:getTime()
+      self.core:endProcess()
+   end
+
+   -- return output maps
+   return outputs
+end
+
+
+
 
 function Compiler:SpatialLinear(linear_module, inputs)
    local outputs = {}
@@ -973,7 +1053,7 @@ function Compiler:getCoefs(mapping)
 			verbose=true, epsilon = 19.7/256, error_type = 0,
 			name = type}
    elseif type == 'HardTanh' then
-      coefs=math.HardTanh{nbSegments=grid.mapper_segs}
+      coefs=math.approx_HardTanh{nbSegments=grid.mapper_segs}
    else
       error('# ERROR <Compiler> : unknown mapping')
    end

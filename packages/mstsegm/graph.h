@@ -34,7 +34,7 @@ static inline float ndiff_2d(THTensor *img,
 // generate graph from image
 static THTensor *image2graph(THTensor *img, int connex, int dt, int *num) {
   // result
-  THTensor *graph;
+  THTensor *graph = NULL;
   int width = img->size[0];
   int height = img->size[1];
 
@@ -110,53 +110,30 @@ static THTensor *graph2image(THTensor *graph, double threshold) {
   if (edges != 2)
     THError("<libmstsegm.graph2image> supported connexity: 4 only");
 
-  // gen IDs
-  int idg = 0;
+  // make a disjoint-set forest
+  universe *u = new universe(width*height);
 
-  // for second pass, store all merges
-  int *merges = new int[width*height];
-  for (int i=0; i<width*height; i++) merges[i] = -1;
-
-  // create image, in 2 passes
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      if (y == 0) {
-        THTensor_set2d(img, x, y, idg);
-        if (x<(width-1))
-          if (THTensor_get3d(graph, x, y, 0) >= threshold) idg++;
-      } else {
-        if ((x > 0) && (THTensor_get3d(graph, x-1, y, 0) < threshold)) {
-          if (THTensor_get3d(graph, x, y-1, 1) < threshold) {
-            double mn = min(THTensor_get2d(img, x-1, y), THTensor_get2d(img, x, y-1));
-            double mx = max(THTensor_get2d(img, x-1, y), THTensor_get2d(img, x, y-1));
-            if (mn == mx) {
-              THTensor_set2d(img, x, y, mn);
-            } else {
-              merges[(int)mx] = mn;
-              THTensor_set2d(img, x, y, mn);
-            }
-          } else {
-            THTensor_set2d(img, x, y, THTensor_get2d(img, x-1, y));
-          }
-        }
-        else if (THTensor_get3d(graph, x, y-1, 1) < threshold)
-          THTensor_set2d(img, x, y, THTensor_get2d(img, x, y-1));
-        else 
-          THTensor_set2d(img, x, y, ++idg);
-      }
+  // process in one pass
+  for (int y = 0; y < height-1; y++) {
+    for (int x = 0; x < width-1; x++) {
+      int a = u->find(y*width + x);
+      int b = u->find(y*width + x+1);
+      int c = u->find((y+1)*width + x);
+      if ((a != b) && (THTensor_get3d(graph, x, y, 0) < threshold)) u->join(a,b);
+      if ((a != c) && (THTensor_get3d(graph, x, y, 1) < threshold)) u->join(a,c);
     }
   }
 
-  // second pass cleanup
+  // generate output
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
-      int id = (int)THTensor_get2d(img, x, y);
-      if (merges[id] != -1) THTensor_set2d(img, x, y, merges[id]);
+      int comp = u->find(y * width + x);
+      THTensor_set2d(img, x, y, comp);
     }
-  }
+  }  
 
   // cleanup
-  delete [] merges;
+  delete u;
 
   // return result
   return img;

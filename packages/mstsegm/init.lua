@@ -105,7 +105,7 @@ if not mstsegm then
               {arg='k', type='number', help='thresholding parameter, a large k enforces larger segmentation areas', default=500},
               {arg='min', type='number', help='min parameter', default=20},
               {arg='disttype', type='string', help='distance metric to use: euclid | angle', default='euclid'},
-              {arg='connex', type='number', help='connectivity (4 or 8, edges per vertex)', default=8},
+              {arg='connex', type='number', help='connectivity (4 or 8, edges per vertex)', default=4},
               {arg='incremental', type='boolean', help='incremental mode', default=false},
               {arg='incremental_cheap', type='boolean', help='cheap incremental mode', default=false},
               {arg='reset', type='boolean', help='incremental only: reset universe', default=false},
@@ -154,7 +154,7 @@ if not mstsegm then
          {...},
          'mstsegm.mst', 'Computes the minimum spanning tree of a given image',
          {arg='image', type='torch.Tensor', help='input image (WxHxN or WxH tensor)'},
-         {arg='connex', type='number', help='connectivity (4 or 8, edges per vertex)', default=8},
+         {arg='connex', type='number', help='connectivity (4 or 8, edges per vertex)', default=4},
          {arg='sigma', type='number', help='gaussian for preprocessing', default=0.8},
          {arg='disttype', type='string', help='distance metric to use: euclid | angle', 
           default='euclid'},
@@ -165,12 +165,16 @@ if not mstsegm then
             error(args.usage)
          end
          if img:nDimension() == 2 then
-            local t2d = img
-            img = torch.Tensor(t2d:size(1),t2d:size(2),1)
-            img:copy(t2d)
+            local t2d = torch.Tensor()
+            t2d:set(img:storage(), 1, img:nElement())
+            t2d:resize(img:size(1), img:size(2), 1)
+            img = t2d
          end
-         gr = Graph()
-         gr:createFromImage(img,connex)
+         gr = Graph{image=img,connex=connex}
+      end
+      if dist == 'euclid' then dist = 0
+      elseif dist == 'angle' then dist = 1
+      else xerror('dist should be one of: angle | euclid',nil,args.usage) 
       end
       if not gr then xerror('please provide an image or a graph',nil,args.usage) end
       return libmstsegm.mst(gr.edges,sigm,dist,connex)
@@ -193,7 +197,7 @@ if not mstsegm then
          {...},
          'mstsegm.mst_minimaxDisparity',
          'Computes the minimax disparity between two vertices in a graph'
-            .. 'if not vertex is provided, then the full matrix is computed',
+            .. 'if no vertex is provided, then the full matrix is computed',
          {arg='mst', type='mstsegm.Tree', help='a minimum spanning tree', req=true},
          {arg='vertex1', type='number', help='a vertex in the graph'},
          {arg='vertex2', type='number', help='a second vertex in the graph'}

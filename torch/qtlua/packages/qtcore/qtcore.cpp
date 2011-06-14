@@ -14,6 +14,7 @@
 #include <QMetaMethod>
 #include <QMetaObject>
 #include <QMetaType>
+#include <QMutex>
 #include <QObject>
 #include <QPoint>
 #include <QPointF>
@@ -23,6 +24,8 @@
 #include <QSize>
 #include <QSizeF>
 #include <QTimer>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QUrl>
 #include <QVariant>
 
@@ -523,6 +526,138 @@ static const luaL_Reg qtimer_lib[] = {
 do_hook(qtimer)
 
 
+
+// ========================================
+// QTREEWIDGET
+
+static QMutex mutexTreeWidget;
+
+static QStringList visitTree(QTreeWidget *tree);
+
+static void 
+visitTreeL(QStringList &list, QTreeWidgetItem *item, int level)
+{
+  list << QString::number(level) << item->text(0);
+  for(int i=0;i<item->childCount(); ++i)
+    visitTreeL(list, item->child(i), level+1);
+}
+
+static QStringList 
+visitTree(QTreeWidget *tree) 
+{
+  QStringList list;
+  int level = 0;
+  for(int i=0;i<tree->topLevelItemCount();++i)
+    visitTreeL(list, tree->topLevelItem(i), level+1);
+  return list;
+}
+
+
+static int
+qtreewidget_totable(lua_State *L)
+{
+  mutexTreeWidget.lock();
+  QTreeWidget *tree = luaQ_checkqobject<QTreeWidget>(L, 1);
+  QStringList l = visitTree(tree);
+  lua_createtable(L, l.size(), 0);
+  for (int i=0; i<l.size(); i++)
+    {
+      luaQ_pushqt(L, QVariant(l[i]));
+      lua_rawseti(L, -2, i+1);
+    }
+  mutexTreeWidget.unlock();
+  return 1;
+}
+
+static int
+qtreewidget_fromtable(lua_State *L)
+{
+  mutexTreeWidget.lock();
+  QTreeWidget *tree = luaQ_checkqobject<QTreeWidget>(L, 1);
+  int size = lua_objlen(L, 2);
+  int columns = 1;
+  if (lua_isnumber(L, 3)) columns = lua_tonumber(L, 3);
+  //QtLuaEngine engine = luaQ_checkqobject<QtLuaEngine>(L, 4);
+  //QtLuaLocker lock(engine);
+  //while (!lock.isReady()) {printf("locked\n")};
+  tree->setColumnCount(columns);
+  int level = 1;
+  int index = 0;
+  QTreeWidgetItem *item = NULL;
+  QList<QTreeWidgetItem *> items;
+  // add new nodes
+  QString cols[32];
+  for (int i=1; i<=size; i++) {
+    lua_pushnumber(L, i);
+    lua_gettable(L, 2);
+    QString str = luaQ_checkqvariant<QString>(L, -1);
+    if ((i%(columns+1))==1) level = str.toInt();
+    else if ((i%(columns+1))==0) {
+      cols[columns-1] = str;
+      // insert element (parent is tree)
+      if (level == 1) {
+        item = new QTreeWidgetItem((QTreeWidget*)0);
+        for (int i=0; i<columns; i++)
+          item->setText(i, cols[i]);
+        items.append(item);
+      } else {
+        // unsupported childs for now
+      }
+    } else {
+      // copy column
+      cols[(i%(columns+1))-2] = str;
+    }
+  }
+  tree->insertTopLevelItems(0, items);
+  mutexTreeWidget.unlock();
+  return 0;
+}
+
+static int
+qtreewidget_clear(lua_State *L)
+{
+  mutexTreeWidget.lock();
+  QTreeWidget *tree = luaQ_checkqobject<QTreeWidget>(L, 1);
+  tree->clear();
+  mutexTreeWidget.unlock();
+  return 0;
+}
+
+static int
+qtreewidget_selected(lua_State *L)
+{
+  mutexTreeWidget.lock();
+  QTreeWidget *tree = luaQ_checkqobject<QTreeWidget>(L, 1);
+  QList<QTreeWidgetItem *> selected = tree->selectedItems();
+  QStringList list;
+  QList<QTreeWidgetItem *>::iterator it;
+  for (it=selected.begin(); it<selected.end(); it++) {
+    list << (*it)->text(0);
+  }
+  luaQ_pushqt(L, QVariant(list));
+  mutexTreeWidget.unlock();
+  return 1;
+}
+
+static const luaL_Reg qtreewidget_lib[] = {
+  {"totable", qtreewidget_totable},
+  {"fromtable", qtreewidget_fromtable},
+  {"selected", qtreewidget_selected},
+  {"clear", qtreewidget_clear},
+  {0, 0}
+};
+
+
+static int
+qtreewidget_hook(lua_State *L)
+{
+  lua_getfield(L, -1, "__metatable");
+  luaL_register(L, 0, qtreewidget_lib);
+  return 0;
+}
+
+
+
 // ========================================
 // QURL
 
@@ -723,6 +858,7 @@ luaopen_libqtcore(lua_State *L)
   HOOK_QVARIANT(QString, qstring);
   HOOK_QVARIANT(QStringList, qstringlist);
   HOOK_QOBJECT (QTimer, qtimer)
+  HOOK_QOBJECT (QTreeWidget,qtreewidget);
   HOOK_QVARIANT(QUrl,qurl);
   HOOK_QVARIANT(QVariantList, qvariantlist);
   HOOK_QVARIANT(QVariantMap, qvariantmap);

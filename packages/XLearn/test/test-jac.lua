@@ -1,4 +1,4 @@
-require 'nn'
+require 'XLearn'
 require 'random'
 
 function get_jac_bprop (module, input, param, dparam)
@@ -15,7 +15,6 @@ function get_jac_bprop (module, input, param, dparam)
    local jacobian = torch.Tensor(param:nElement(),dout:nElement()):zero()
 
    for i=1,sdout:nElement() do
-      toolBox.dispProgress(i, sdout:nElement())
       dout:zero()
       sdout[i] = 1
       module:zeroGradParameters()
@@ -43,9 +42,7 @@ function get_jac_fprop(module, input, param)
    local outa = torch.Tensor(jacobian:size(2))
    local outb = torch.Tensor(jacobian:size(2))
    
-   for i=1,sin:nElement() do
-      toolBox.dispProgress(i, sin:nElement())
-      
+   for i=1,sin:nElement() do      
       sin[i] = sin[i] - small
       outa:copy(module:forward(input))
       sin[i] = sin[i] + 2*small
@@ -65,7 +62,9 @@ function test_jac (module, input, minval, maxval)
    input:copy(lab.rand(input:nElement()):mul(inrange):add(minval))
    local jac_fprop = get_jac_fprop(module,input)
    local jac_bprop = get_jac_bprop(module,input)
-   io.write(string.format(" - distance %8.6e\n",jac_fprop:dist(jac_bprop,2)))
+   local error = jac_fprop:dist(jac_bprop,2)
+   --io.write(string.format(" - distance %8.6e\n",error))
+   return error
 end
 
 function test_jac_param (module, input, param, dparam, minval, maxval)
@@ -79,7 +78,9 @@ function test_jac_param (module, input, param, dparam, minval, maxval)
    jac_fprop = get_jac_fprop(module, input, param)
    --print('jac_bprop',jac_bprop)
    --print('jac_fprop',jac_fprop)
-   io.write(string.format(" - distance %8.6e\n",jac_fprop:dist(jac_bprop,2)))
+   local error = jac_fprop:dist(jac_bprop,2)
+   --io.write(string.format(" - distance %8.6e\n",error))
+   return error
 end
 
 function test_conv(from, to, ini, inj, ki, kj , si, sj)
@@ -129,9 +130,10 @@ function testwriting(module,input, minval, maxval)
    local m = torch.DiskFile('tmp.bin'):binary():readObject()
    m:forward(input)
    m:backward(input,go)
+   -- cleanup
+   toolBox.exec('rm tmp.bin')
 
    local fo2 = torch.Tensor():resizeAs(m.output):copy(m.output)
    local bo2 = torch.Tensor():resizeAs(m.gradInput):copy(m.gradInput)
-   print('before after writing forward distance ' .. fo:dist(fo2))
-   print('before after writing backward distance ' .. bo:dist(bo2))
+   return fo:dist(fo2),bo:dist(bo2)
 end

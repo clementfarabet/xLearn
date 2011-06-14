@@ -79,10 +79,21 @@ function Reshape:__init(...)
          self.size[i] = select(i, ...)
       end
    end
-   self.output:resize(self.size)
+   self.resolvedSize = torch.LongStorage():resize(n)
+   self.resolvedSize:copy(self.size)
 end
 
 function Reshape:forward(input)
+   self.resolvedSize = self.resolvedSize or torch.LongStorage()
+   self.resolvedSize:resize(#self.size)
+   for i = 1,#self.size do
+      if self.size[i] == -1 then
+         self.resolvedSize[i] = input:size(i)
+      else
+         self.resolvedSize[i] = self.size[i]
+      end
+   end
+   self.output:resize(self.resolvedSize)
    return self.output:copy(input)
 end
 
@@ -96,13 +107,7 @@ function Reshape:write(file)
    file:writeObject(self.size)
 end
 
-function Reshape:read(file, version)
+function Reshape:read(file)
    parent.read(self, file)
-   if version > 0 then
-      self.size = file:readObject()
-   else
-      local size = file:readObject()
-      self.size = torch.LongStorage(size:size())
-      self.size:copy(size)
-   end
+   self.size = file:readObject()
 end

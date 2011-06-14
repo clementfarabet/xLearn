@@ -4,6 +4,9 @@ SET(src )
 FILE(GLOB MyCSources segments/coef*)
 
 SET(luasrc defines.lua
+           defines_ibm_asic.lua
+           defines_xilinx_ml605.lua
+           defines_pico_m503.lua
            tools.lua
            rom.lua
            Log.lua
@@ -18,4 +21,4 @@ SET(luasrc defines.lua
 	   init.lua
 	   ${MyCSources})
 
-ADD_TORCH_PACKAGE(NeuFlow "${src}" "${luasrc}") 
+ADD_TORCH_PACKAGE(NeuFlow "${src}" "${luasrc}" "Hardware") 

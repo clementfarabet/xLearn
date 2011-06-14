@@ -7,7 +7,7 @@ require 'XLearn'
 require 'os'
 require 'mstsegm'
 require 'mincut'
-require 'Kinect'
+require 'kinect'
 
 -- parse args
 op = OptionParser('%prog -s SOURCE [options]')
@@ -39,7 +39,7 @@ displayer_segments = Displayer()
 
 -- global zoom
 zoom = 1
-kinect = Kinect(640,480)
+kinect = kinect.Device(640,480)
 -- incremental segmentation
 do
    local nslices = 8

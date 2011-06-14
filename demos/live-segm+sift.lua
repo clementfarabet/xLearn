@@ -49,6 +49,7 @@ profiler = Profiler()
 -- incremental segmentation
 do
    local nslices = 8
+   local cheap = false
    local segmbuf
    local ringbuf = {}
    local ringbuf_i = 0

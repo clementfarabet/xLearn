@@ -109,6 +109,7 @@ clean:
 
 install_bins:
 	mkdir -p "$(DESTDIR)$(BINDIR)"
+	chmod +x src/bin/luarocks*
 	cd src/bin && cp $(BIN_FILES) "$(DESTDIR)$(BINDIR)"
 
 install_luas:

@@ -151,10 +151,17 @@ bool minimax(tree *t, int vertex1, int vertex2, int *marks, edge *mm) {
         return true;
       }
       if (minimax(t, nvertex, vertex2, marks, mm)) {
-        if (mm->w <= t->mst_weights[t->connex*vertex1+k]) {
+        if (mm->w < t->mst_weights[t->connex*vertex1+k]) {
           mm->w = t->mst_weights[t->connex*vertex1+k];
           mm->a = vertex1;
           mm->b = nvertex;
+        } else if (mm->w == t->mst_weights[t->connex*vertex1+k]) {
+          int chance = rand() % 10;
+          if ((mm->w == -1) || (chance == 5)) {
+            mm->w = t->mst_weights[t->connex*vertex1+k];
+            mm->a = vertex1;
+            mm->b = nvertex;
+          }
         }
         return true;
       }
@@ -179,8 +186,15 @@ edge minimax_disparity(tree *t, int vertex1, int vertex2) {
   int *marks = new int[t->nvertices * t->connex];
   for (int i=0; i<(t->nvertices * t->connex); i++) marks[i] = -1;
 
-  // compute minimax disparity between two vertices, by walking through the tree
-  minimax(t, vertex1, vertex2, marks, &mm);
+  // check equality
+  if (vertex1 == vertex2) {
+    mm.w = 0;
+    mm.a = vertex1;
+    mm.b = vertex2;
+  } else {
+    // compute minimax disparity between two vertices, by walking through the tree
+    minimax(t, vertex1, vertex2, marks, &mm);
+  }
 
   // assert
   if ((mm.a == -1) || (mm.b == -1)) {

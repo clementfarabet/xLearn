@@ -1,0 +1,37 @@
+Video Package Reference Manual
+
+A simple wrapper around [[http://www.ffmpeg.org/][=ffmpeg=]].
+
+Provides a generic Video class to load, play, modify and save videos.
+
+---+ Video
+#Video
+
+=Video= is a standard =xLearn= class, most of its methods use 
+[[../toolBox/index.hlp#toolBox_unpack][=unpack=]] to parse
+their arguments: ordered or named arguments can be used, and a call without 
+argument prints a detailled online help for the method/constructor.
+
+---++ =Video(...)=
+
+_Constructor_: decodes a video file into PNGs or JPGs, and then either loads
+all images into an internal list of tensors, or creates a list of paths to 
+these images, to be loaded later.
+
+For example:
+<verbatim>
+> vid = Video('/path/to/video.mp4')
+> vid:play{}
+</verbatim>
+
+---++ =vid:play(...)=
+
+---++ =vid:play3D(...)=
+
+---++ =vid:forward()=
+
+---++ =vid:save(...)=
+
+---++ =vid:totensor(...)=
+
+---++ =vid:clear()=

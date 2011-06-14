@@ -1,15 +1,18 @@
 --- !/usr/bin/env lua
---- -*- coding: utf-8 -*-
+
 require 'XLearn'
--- load jacobian tester
-dofile('test-jac.lua')
+dofile 'test-jac.lua'
 
+require 'lunit'
 
-function test_LocalNorm()
-   -- params
-   local inputSize = math.random(11,20)
-   local kersize = math.random(5,10)
-   local nbfeatures = math.random(5,10)
+module("TestLocalNorm", lunit.testcase, package.seeall)
+
+-- params
+local inputSize = math.random(11,20)
+local kersize = math.random(5,10)
+local nbfeatures = math.random(5,10)
+
+function test_Gaussian2D()
    -- init kernel
    kernel = image.gaussian{width=kersize}
    -- init module
@@ -17,11 +20,29 @@ function test_LocalNorm()
    -- init input
    input = lab.rand(inputSize,inputSize,nbfeatures)
    -- bprop
-   print("========================== Testing LocalNorm input ==========================")
-   test_jac(module, input)
-   print("========================== Testing LocalNorm read/write ==========================")
-   testwriting(module,input)
+   local error = test_jac(module, input)
+   assert_almost_equal(0, error, 5, "2D Gaussian -- L2 distance")
 end
- 
+
+function test_Gaussian1D()
+   -- init kernel
+   kernelh = image.gaussian1D(11):resize(11,1)
+   kernelv = kernelh:t()
+   -- init module
+   module = nn.LocalNorm{kernels={kernelv,kernelh},nInputPlane=nbfeatures,threshold=0.1}
+   -- init input
+   input = lab.rand(inputSize,inputSize,nbfeatures)
+   -- bprop
+   local error = test_jac(module, input)
+   assert_almost_equal(0, error, 5, "1D Gaussians -- L2 distance")
+end
+
+function test_io()
+   module = nn.LocalNorm(kernel,nbfeatures,0.1)
+   local error_f, error_b = testwriting(module,input)
+   assert_equal(0, error_f, "IO -- L2 distance (forward)")
+   assert_equal(0, error_b, "IO -- L2 distance (backward)")
+end
+
 -- LocalNorm param
-test_LocalNorm()
+lunit.main()

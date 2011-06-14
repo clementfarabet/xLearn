@@ -49,6 +49,12 @@ function ConcatTable:updateParameters(learningRate)
    end
 end
 
+function ConcatTable:empty()
+  for i=1,#self.modules do
+     self.modules[i]:empty()
+  end
+end
+
 function ConcatTable:write(file)
    parent.write(self, file)
    file:writeObject(self.modules)

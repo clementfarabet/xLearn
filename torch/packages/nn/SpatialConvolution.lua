@@ -89,6 +89,11 @@ function SpatialConvolution:updateParameters(learningRate)
    self.bias:add(-learningRate, self.gradBias)
 end
 
+function SpatialConvolution:decayParameters(decay)
+   self.weight:add(-decay, self.weight)
+   self.bias:add(-decay, self.bias)
+end
+
 function SpatialConvolution:write(file)
    parent.write(self, file)
    file:writeInt(self.kW)

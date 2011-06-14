@@ -500,7 +500,8 @@ function luaFlow.Node.Display(args)
                        error(name .. ' input must be a 2|3-dimensional Array')
                     end
                     win = image.displayList{images=inputs[1].data, zoom=zoom, 
-                                            min=min, max=max, window=win, legend=legend}
+                                            min=min, max=max, window=win, legend=legend, 
+                                            gui=false}
                     if verbose then
                        print(name .. ' displaying data [' .. legend .. ']')
                     end

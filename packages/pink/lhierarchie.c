@@ -547,7 +547,7 @@ int32_t computeSaliencyMap(JCctree *CT, struct xvimage *ga, int32_t *label, int3
   int32_t u,x,y,i,j,c1;
   /* la valeur maximum de l'attribut est à la racine */
   double facteur = mcmax(255/(double)attribut[CT->root], 0.05); 
-  facteur = 1;
+  //facteur = 1;
   //printf("Attribut[racine] = %d et facteur %lf \n", attribut[CT->root],facteur);
 #ifdef LCAFAST 
   /* Structure de donnée pour lca fast */

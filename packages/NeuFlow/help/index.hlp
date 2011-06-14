@@ -1,0 +1,240 @@
+NeuFlow (DataFlow Hardware) Package Reference Manual
+
+This package is a set of tools to parse, compile, optimize and link
+algorithms into bytecode that can be decoded by the =neuFlow= architecture.
+
+[[http://www.neuflow.org][neuFlow]] was described in multiple documents:
+
+C. Farabet, Y. LeCun, K. Kavukcuoglu, B. Martini, P. Akselrod, S. Talay, and E. Culurciello (2011). ="Large-Scale FPGA-Based Convolutional Networks"=. In R. Bekkerman, M. Bilenko, and J. Langford (Ed.), Scaling Up Machine Learning. Cambridge University Press.
+
+C. Farabet, B. Martini, P. Akselrod, S. Talay, Y. LeCun and E. Culurciello, ="Hardware Accelerated Convolutional Neural Networks for Synthetic Vision Systems"=, in International Symposium on Circuits and Systems (ISCAS'10), IEEE, Paris, 2010.
+
+
+---+ Classes
+
+This series of Classes were designed to facilitate the generation of 
+bytecode for the =neuFlow= architecture.
+
+The first 3 classes provide 3 different levels of API: the top class =NeuFlow= is 
+the recommended level for users who are not familiar with the architecture; the 
+class =Compiler= requires a little more knowledge, and cannot be used by itself to
+produce end-to-end applications (including data exchange with a host system); the 
+class =CoreUser= is the entry point is the API to common operators, pre-mapped for
+=neuFlow=.
+
+The next classes are lower-level, and should never be used directly in any user 
+code.
+
+---++ NeuFlow
+
+=NeuFlow= is the top-level, easy-to-use class.
+
+Here is a short example that summarizes its key methods (the example shows how
+to compute a Gabor filter bank on =neuFlow=):
+
+<verbatim>
+-- create the object, the name is important to produce reusable cache files
+neuFlow = NeuFlow{prog_name = 'a-simple-program'}
+
+-- load a test image (lena), and select its green channel
+input = image.lena():select(3,2)
+
+-- Creates a Gabor bank with 16 filters (4 scales, 4 orientations)
+network = nn.Sequential()
+network:add(nn.GaborLayer(4,4,4).bank)
+
+-- the first step is to ellaborate the code, e.g. tell neuFlow what 
+-- to do. In that case, we're telling it to receive some data
+-- from the host (input, which is simply provided for its size at 
+-- this stage); then we're giving it a network, which is going to
+-- transform this input into an output (the network could be anything);
+-- and finally we're sending the result back to the host.
+--
+-- note that the communication methods are from the point of view of
+-- neuFlow, at this stage
+--
+neuFlow:beginLoop('main') do
+
+   -- copy input image to dev (in simul, the data is embedded)
+   input_dev = neuFlow:copyFromHost(input)
+
+   -- compile network
+   outputs_dev = neuFlow:compile(convnet, input_dev)
+
+   -- ship results back to the host
+   outputs = neuFlow:copyToHost(outputs_dev)
+
+end neuFlow:endLoop('main')
+-- end of loop
+
+-- loads the bytecode on the device
+neuFlow:loadBytecode()
+
+-- at this point, the bytecode is compiled, loaded, and executing on the 
+-- device.
+
+-- now, we can simply grab images from any source, and send them to
+-- neuFlow to be processed
+source = nn.ImageSource('camera')
+while true do
+   -- grab new frame for source:
+   camFrame = source:forward()
+
+   -- send frame to neuFlow, and retrieve results.
+   -- note that these methods are now from the point of view of the host
+   -- (which is currently running this code)
+   neuFlow:copyToDev(input)
+   neuFlow:copyFromDev(outputs)
+
+   -- 'outputs' is a WxHx16 tensor, that contains the 16 filtered maps
+end
+
+</verbatim>
+
+This little example shows the key aspects of using the =NeuFlow= high-level
+interface, to first ellaborate some code:
+
+* [[#neuFlow_Const][construct the object]]
+* [[#neuFlow_copyFromHost][copy the data from the host to neuFlow]]
+* [[#neuFlow_compile][compile an algorithm, network, or any sequence/tree of transforms]]
+* [[#neuFlow_copyToHost][copy the results to the host]]
+
+Once the code is ellaborated, the bytecode needs to be generated and loaded, 
+to then execute and interact with the running program:
+
+* [[#neuFlow_loadBytecode][load the bytecode on the device]]
+* [[#neuFlow_copyToDev][send new data to device]] (synchronized to =copyFromHost=)
+* [[#neuFlow_copyFromDev][receive new results from device]] (synchronized to =copyToHost=)
+
+---+++ NeuFlow{...}
+#neuFlow_Const
+
+The _Constructor_. Instantiates a =NeuFlow= object, and optionally initiates 
+the communication layer with the hardware.
+
+A typical example of instantiation:
+<verbatim>
+neuFlow = NeuFlow{prog_name = 'loopback',
+                  offset_code = bootloader.entry_point_b,
+                  offset_data_1D = bootloader.entry_point_b + 320*kB,
+                  offset_data_2D = bootloader.entry_point_b + 360*kB,
+                  offset_heap = bootloader.entry_point_b + 550*kB,
+                  global_msg_level = 'none',
+                  compiler_msg_level = 'none',
+                  core_msg_level = 'none',
+                  interface_msg_level = 'none'}
+</verbatim>
+
+Most arguments are optional, and if not provided default to common values. 
+The call above creates all necessary data structures to compile code with 
+[[#neuFlow_compile][=neuFlow:compile()=]], and tries to connect to the device
+via ethernet (this usually requires having super user rights on a typical UNIX
+machine).
+
+To instantiate a =NeuFlow= object for simulation (e.g. no physical connection), 
+use the following code:
+<verbatim>
+neuFlow = NeuFlow{prog_name = 'someName',
+                  mode = 'simulation'}
+</verbatim>
+
+---+++ neuFlow:allocHeap(tensor)
+
+---+++ neuFlow:allocDataPacked(tensor, bias)
+
+---+++ neuFlow:allocData(tensor)
+
+---+++ neuFlow:copy(source, dest)
+
+---+++ neuFlow:copyFromHost(source, dest)
+#neuFlow_copyFromHost
+
+---+++ neuFlow:copyToHost(source, dest)
+#neuFlow_copyToHost
+
+---+++ neuFlow:copToDev(tensor)
+#neuFlow_copyToDev
+
+---+++ neuFlow:copyFromDev(tensor)
+#neuFlow_copyFromDev
+
+---+++ neuFlow:compile(network, inputs)
+#neuFlow_compile
+
+---+++ neuFlow:beginLoop(tag)
+
+---+++ neuFlow:endLoop(tag)
+
+---+++ neuFlow:term()
+
+---+++ neuFlow:writeByteCode{...}
+
+---+++ neuFlow:execSimulation{...}
+
+---+++ neuFlow:loadBytecode(bytecode)
+#neuFlow_loadBytecode
+
+---+++ neuFlow:loadBytecodeFromFile(file)
+
+---++ Compiler
+
+---++ CoreUser
+
+---++ Core
+
+---++ Linker
+
+---++ Memory
+
+---++ Interface
+
+
+---+ Functions
+
+Functions provided by this package essentially extend the
+[[#../toolBox/index.html][=toolBox=]] and =math= packages.
+
+---++ toolBox
+
+---+++ toolBox.readBinWriteHex(input, output, word_width, requested_size_b)
+
+This function reads a binary file and produces an hexadecimal (ascii) file.
+
+This is useful to produce binaries to initiate memory content in simulation
+(for verilog).
+
+---+++ toolBox.readBinWriteRom(input, output, word_width, name)
+
+This function reads a binary file and produces a ROM, to be directly
+synthesized by XST and other tools (in verilog).
+
+
+---++ math
+
+---+++ math.approx{...}
+
+This function computes a piecewise linear approximation of a given function.
+
+The given function should be a simple Lua function with the following signature:
+
+<verbatim>
+func = function(x) local res = ... return res end
+</verbatim>
+
+The coefficients of the the sub-segments are returned. A cache file is used to 
+speedup the generation of subsequent approximations.
+
+---+++ math.approx_line{...}
+
+This function should be used when approximating functions that are already linear.
+
+---+++ math.approx_HardTanh{...}
+
+This function returns segments in correct format for nn.HardTanh nonlinearity
+(which is 3 segments) HardTanh is defined as:
+
+<verbatim>
+f(x) = 1, if x > 1,
+f(x) = -1, if x < -1,
+f(x) = x, otherwise. 
+</verbatim>

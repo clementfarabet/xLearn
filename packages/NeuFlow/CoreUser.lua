@@ -797,7 +797,7 @@ function CoreUser:normKernel(kernel, sum)
    end
 end
 
-function CoreUser:localNormalizeMeanBank(inputs, kernels, outputs)
+function CoreUser:localNormalizeMeanBank(inputs, kernels, outputs, xN_coefs)
    if (self.msg_level ~= 'none') then
       self:message('exec.mean.norm.with.'..#inputs..'x'..inputs[1].orig_h..'x'..inputs[1].orig_w..'.image')
    end
@@ -814,15 +814,8 @@ function CoreUser:localNormalizeMeanBank(inputs, kernels, outputs)
          kernel.mean = 1
       end
    end
-
-   -- (1) generate coefs for scaler
-   local xN = function (x) 
-                 return x / #kernels
-              end
-   local xN_coefs = math.approx_line{mapping=xN, min=num.min, max=num.max, odd = true,
-                                nbSegments=grid.mapper_segs, Q=num.frac_,
-                                verbose=true, a = 1/#kernels, b = 0}
-
+   
+   
    -- (2) compute mean across inputs
    local average_id = self.mem:allocOnTheHeap(inputs[1].orig_h, inputs[1].orig_w, {}, true)
    
@@ -834,7 +827,7 @@ function CoreUser:localNormalizeMeanBank(inputs, kernels, outputs)
    end
 end
 
-function CoreUser:localNormalizeStdBank(inputs, kernels, outputs, threshold)
+function CoreUser:localNormalizeStdBank(inputs, kernels, outputs, sqrtCoefs)
    if (self.msg_level ~= 'none') then
       self:message('exec.std.norm.with.'..#inputs..'x'..inputs[1].orig_h..'x'..inputs[1].orig_w..'.image')
    end
@@ -851,21 +844,6 @@ function CoreUser:localNormalizeStdBank(inputs, kernels, outputs, threshold)
          kernel.mean = 1
       end
    end
-
-   -- (1) generate coefs for sqrt
-   local mapping
-   threshold = threshold or 0
-   mapping = function (x) 
-                x = x / #kernels
-                if x < threshold then return math.sqrt(threshold)
-                else return math.sqrt(x) end
-             end
-   sqrtCoefs = math.approx{mapping=mapping, min=0, max=num.max,
-                           nbSegments=grid.mapper_segs, Q=num.frac_,
-                           verbose=true, epsilon=25/256,error_type = 0,
-			   name = 'Sqrt_th_div_'..#kernels..'_s_'..threshold}
-   --name = 'Sqrt_th_div_s_'..#kernels}
-   
 
    -- (2) square all maps
    local squares = {}

@@ -7,6 +7,7 @@ extern void nn_SpatialConvolutionTable_init(lua_State *L);
 extern void nn_SpatialConvolutionTableHessian_init(lua_State *L);
 extern void nn_SpatialMaxPooling_init(lua_State *L);
 extern void nn_SpatialSubSamplingHessian_init(lua_State *L);
+extern void nn_SpatialReSampling_init(lua_State *L);
 extern void nn_TanhHessian_init(lua_State *L);
 extern void nn_LcEncoder_init(lua_State *L);
 extern void nn_LcDecoder_init(lua_State *L);
@@ -21,6 +22,7 @@ extern int image_rgb2hsl(lua_State *L);
 extern int image_hsl2rgb(lua_State *L);
 extern int image_rgb2hsv(lua_State *L);
 extern int image_hsv2rgb(lua_State *L);
+extern int image_mergeVectorsIntoSegm(lua_State *L);
 
 extern int toolbox_usleep(lua_State *L);
 extern int toolbox_fillTensor(lua_State *L);
@@ -33,7 +35,8 @@ extern int toolbox_dist2vectors(lua_State *L);
 extern int toolbox_convFixedPoint(lua_State *L);
 extern int toolbox_mapFixedPoint(lua_State *L);
 extern int toolbox_get_k_local_maxima(lua_State *L);
-
+extern int toolbox_print_tensor_formatted(lua_State *L);
+extern int toolbox_fstat_time(lua_State *L);
 /*
 extern int toolbox_ncursePrint(lua_State *L);
 extern int toolbox_ncurseStart(lua_State *L);
@@ -53,13 +56,16 @@ static const struct luaL_reg extraroutines [] = {
   {"fillByteTensor", toolbox_fillByteTensor},
   {"fillFloatTensor", toolbox_fillFloatTensor},
   {"usleep", toolbox_usleep},
+  {"fstat_time", toolbox_fstat_time},
   {"spatialDist", toolbox_spatialDist},
   {"createTable", toolbox_createTable},
   {"Dist2",toolbox_dist2vectors},
   {"convFixedPoint",toolbox_convFixedPoint},
   {"mapFixedPoint",toolbox_mapFixedPoint},
   {"get_k_local_maxima",toolbox_get_k_local_maxima},
+  {"print_tensor_formatted",toolbox_print_tensor_formatted},
   {"image_maskToRGB", image_maskToRGB},
+  {"mergeVectorsIntoSegm", image_mergeVectorsIntoSegm},
   {"rgb2hsl", image_rgb2hsl},
   {"hsl2rgb", image_hsl2rgb},
   {"rgb2hsv", image_rgb2hsv},
@@ -89,6 +95,7 @@ DLL_EXPORT int luaopen_libXLearn(lua_State *L)
   nn_SpatialConvolutionTableHessian_init(L);
   nn_SpatialMaxPooling_init(L);
   nn_SpatialSubSamplingHessian_init(L);
+  nn_SpatialReSampling_init(L);
   nn_TanhHessian_init(L);
   nn_LcEncoder_init(L);
   nn_LcDecoder_init(L);

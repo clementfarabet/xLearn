@@ -1,0 +1,78 @@
+Image+ Package Reference Manual
+
+An extension to the original [[../image/index.hlp][=Image=]] package.
+
+---+ Display utilities
+
+---++ =image.display(...)=
+
+---++ =image.displayList(...)=
+
+---++ =image.displayNetwork(...)=
+
+---+ Saving/Loading images
+
+---++ =image.save(file, tensor)=
+
+=image.save(string filename, Tensor src)=
+saves a  [[../torch/index.hlp#Tensor][=Tensor=]] =src= out as an
+image in file =filename=.  
+
+The =type= is inferred from the file name (types supported 
+are png and ascii pgm/ppm).
+
+---++ =image.load(file, depth)=
+
+=image.load(string filename, number depth)=
+loads an image file, and converts to an
+=m= x =n= x =p= Tensor, where =m= is the width of the image
+and =n= is the height, and =p= is the depth.
+
+If =depth= is not supplied then it is inferred from the 
+loaded image.
+If =depth= = 1 the image is converted to Grayscale.
+If =depth= = 3 the image is converted to RGB.
+If =depth= = 4 the image is converted to RGBA.
+
+The =type= is inferred from the file name (types supported 
+are jpeg, png and ascii pgm/ppm).
+
+---++ =image.lena(w,h)=
+
+---+ Filtering
+
+---++ =image.gaussian(...)=
+
+---++ =image.laplacian(...)=
+
+---++ =image.gabor(...)=
+
+---++ =image.convolve(input, kernel, mode)=
+
+---++ =image.convolveAndAcc(input, kernel, output, mode)=
+
+---+ Useful manipulation functions
+
+---++ =image.applySegmentation(...)=
+
+---++ =image.createColorMap(nbColor,seed)=
+
+---++ =image.findBlobs(...)=
+
+---++ =image.makePyramid(...)=
+
+---+ Well-known color space transforms
+
+---++ =image.rgb2yuv(input, [output])=
+
+---++ =image.yuv2rgb(input, [output])=
+
+---++ =image.rgb2y(input, [output])=
+
+---++ =image.rgb2hsl(input, [output])=
+
+---++ =image.hsl2rgb(input, [output])=
+
+---++ =image.rgb2hsv(input, [output])=
+
+---++ =image.hsv2rgb(input, [output])=

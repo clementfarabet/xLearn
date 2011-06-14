@@ -15,41 +15,28 @@ op:add_option{'-n', '--network', action='store', dest='network',
               help='path to existing [trained] network'}
 op:add_option{'-d', '--dataset', action='store', dest='dataset', 
               help='path to dataset'}
-op:add_option{'-r', '--debug', action='store', dest='ratio', 
+op:add_option{'-t', '--testset', action='store', dest='ratio', 
               help='percentage of samples to use for testing', default=0.2}
 op:add_option{'-p', '--patches', action='store', dest='patches', 
               help='nb of patches to use'}
 op:add_option{'-z', '--normalize', action='store', dest='norm', 
               help='type of norm to use: regular | fixedThres | neuFlow', default='regular'}
-local options,args = op:parse_args()
-
--- criterion
-local criterion = nn.MSECriterion()
-
--- seed
---random.manualSeed(0)
-
-function facesForward(self,prediction, target)
-   local y,detected=lab.max(prediction)
-   local y,known=lab.max(target)
-   -- compute the percentage of wrong labels
-   _,Tlabels = lab.max(target,3)
-   _,Ilabels = lab.max(prediction,3)
-   err = Tlabels:resize(1)[1] == Ilabels:resize(1)[1] and 0 or 1
-   -- return 1 if mislabeled 0 othw
-   return err
-end
-criterion.forward = facesForward
-
--- trainer
-local trainer
+op:add_option{'-s', '--show', action='store', dest='show', 
+              help='show dataset', default=false}
+op:add_option{'-r', '--randseed', action='store', dest='seed',
+              help='force random seed (if not provided, then initial conditions are random)'}
+options,args = op:parse_args()
 
 -- make local scratch dir
 os.execute('mkdir -p scratch')
 
+-- use seed (for repeatable experiments)
+if options.seed then
+   random.manualSeed(options.seed)
+end
+
 -- First pass: create network
-local convnet
-if (options.network == nil) then
+if not options.network then
    -- localnorm
    if options.norm == 'regular' then
       localnorm = nn.LocalNorm(image.gaussian{width=7, amplitute=1}, 1)
@@ -70,28 +57,18 @@ if (options.network == nil) then
    convnet:add(nn.SpatialConvolutionTable(nn.SpatialConvolutionTable:KorayTable(8,20,4), 7, 7))
    convnet:add(nn.Tanh())
    convnet:add(nn.SpatialLinear(20,2))
-
-   -- Learning Parameters
-   trainer = nn.StochasticTrainer(convnet, criterion)
-   trainer:setShuffle(false)
-   trainer.learningRate = 0.001
-   trainer.learningRateDecay = 0.01
-   trainer.maxEpoch = 50
 else
    -- reload trained network
-   convnet = nn.Sequential()
    print('# reloading previously trained network')
-   local file = torch.DiskFile(options.network, 'r')
-   convnet:read(file)
-   file:close()
-
-   -- Learning Parameters
-   trainer = nn.StochasticTrainer(convnet, criterion)
-   trainer:setShuffle(false)
-   trainer.learningRate = 0.001
-   trainer.learningRateDecay = 0.01
-   trainer.maxEpoch = 50
+   convnet = nn.Sequential():readf(options.network)
 end
+
+-- criterion and trainer
+trainer = nn.StochasticTrainer(convnet, nn.MSECriterion())
+trainer:setShuffle(false)
+trainer.learningRate = 0.001
+trainer.learningRateDecay = 0.01
+trainer.maxEpoch = 50
 
 -- Datasets path
 datasetPath = options.dataset or '../datasets/faces_cut_yuv_32x32/'
@@ -124,55 +101,56 @@ dataBG:appendDataSet(dataBGext)
 dataBG:shuffle()
 
 -- pop subset for testing
-local ratio = options.ratio
-local testFace = dataFace:popSubset{ratio=ratio}
-local testBg = dataBG:popSubset{ratio=ratio}
+ratio = options.ratio
+testFace = dataFace:popSubset{ratio=ratio}
+testBg = dataBG:popSubset{ratio=ratio}
 
 -- training set
-local trainData = DataList()
+trainData = DataList()
 trainData:appendDataSet(dataFace,'Faces')
 trainData:appendDataSet(dataBG,'Bg')
 
 -- testing set
-local testData = DataList()
+testData = DataList()
 testData:appendDataSet(testFace,'Faces')
 testData:appendDataSet(testBg,'Bg')
 
 -- display sets
-trainData:display{nbSamples=300, title='Training Set'}
-testData:display{nbSamples=300, title='Test Set'}
+if options.show then
+   trainData:display{nbSamples=300, title='Training Set', gui=false}
+   testData:display{nbSamples=300, title='Test Set', gui=false}
+end
 
 -- training hooks
-function saveNetTimeStamp(fileName, net)
-   fileName = 'scratch/'..fileName..'-'..os.date("%Y_%m_%d@%X")
-   local file = torch.DiskFile(fileName, 'w')
-   net:write(file)
-   file:close()
-   print('# saving network to '..fileName)
+confusion = nn.ConfusionMatrix(2)
+
+trainer.hookTrainSample = function(trainer, sample)
+   -- update confusion matrix
+   confusion:add(trainer.module.output[1][1], sample[2][1][1])
 end
-function hookTrainSample(trainer, sample)
+
+trainer.hookTestSample = function(trainer, sample)
+   -- update confusion matrix
+   confusion:add(trainer.module.output[1][1], sample[2][1][1])
 end
-function hookTrainEpoch(trainer)
-   print('# current error (percent) = ' .. trainer.currentError*100)
+
+trainer.hookTrainEpoch = function(trainer)
+   -- print confusion
+   print(confusion)
+   confusion:zero()
+
+   -- run on test_set
    trainer:test(testData)
-   saveNetTimeStamp('network-faces', trainer.module)
+
+   -- print confusion
+   print(confusion)
+   confusion:zero()
+
+   -- save net
+   local filename = paths.concat('scratch', (options.saveto or 'network-faces')..'-'..os.date("%Y_%m_%d@%X"))
+   print('# saving network to '..filename)
+   trainer.module:writef(filename)
 end
-function hookTestSample(trainer, sample)
-end
-function hookTestEpoch(trainer)
-   print('# current error (percent) = ' .. trainer.currentError*100)
-   if trainer.previousTestError then
-      if trainer.currentError > 1.2*trainer.previousTestError then
-         print('# exiting (convergence reached)')
-         os.exit()
-      end
-   end
-   trainer.previousTestError = trainer.currentError
-end
-trainer.hookTrainSample = hookTrainSample
-trainer.hookTrainEpoch = hookTrainEpoch
-trainer.hookTestSample = hookTestSample
-trainer.hookTestEpoch = hookTestEpoch
 
 -- Run trainer
 trainer:train(trainData)

@@ -40,6 +40,12 @@ function ParallelTable:zeroGradParameters()
    end
 end
 
+function ParallelTable:empty()
+  for i=1,#self.modules do
+     self.modules[i]:empty()
+  end
+end
+
 function ParallelTable:updateParameters(learningRate)
    for _,module in ipairs(self.modules) do
       module:updateParameters(learningRate)

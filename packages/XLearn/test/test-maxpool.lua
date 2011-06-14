@@ -1,7 +1,6 @@
-require 'nn'
-require 'atn'
+require 'XLearn'
 
-dofile('./test/test-jac.lua')
+dofile('test-jac.lua')
 
 -- test the forward and backward function with non-table version
 -- and check the jacobian
@@ -73,8 +72,7 @@ print('forward OK')
 function test_maxpool(from, ini, inj, ki, kj , si, sj)
    local module = nn.SpatialMaxPooling(ki,kj,di,dj)
    local input = torch.Tensor(ini, inj, inf):zero()
-   
-   io.write("input")
+
    test_jac(module, input)
 
    testwriting(module, input)

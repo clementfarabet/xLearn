@@ -121,8 +121,8 @@ function unpack(args, funcname, description, ...)
       iargs = args[1]
    else
       -- ordered args
-      for i,a in ipairs(args) do
-         iargs[defs[i].arg] = a
+      for i = 1,select('#',...) do
+         iargs[defs[i].arg] = args[i]
       end
    end
 
@@ -173,10 +173,9 @@ end
 function unpack_class(object, args, funcname, description, ...)
    local dargs = unpack(args, funcname, description, ...)
    for k,v in pairs(dargs) do
-      object[k] = v
-   end
-   for i = 1,#object do
-      object[i] = nil
+      if type(k) ~= 'number' then
+         object[k] = v
+      end
    end
 end
 
@@ -336,7 +335,7 @@ function hasNaN(tensor)
             idx[j] = math.floor(left/tensor:size(j))
             left = left % idx[j]
          end
-         print('Nan found at',idx)
+         print('Nan found at ' .. tostring(idx))
          return hasNan
       end
    end
@@ -387,6 +386,8 @@ do
       if (barDone and current == 1) then
          barDone = false
          previous = -1
+      else
+         io.write('\r')
       end
 
       --if (percent ~= previous and not barDone) then
@@ -404,7 +405,6 @@ do
          for i=1,47 do io.write('\b') end
          io.write(' ', current, '/', goal, ' ')
          -- reset for next bar
-          io.write('\r')
          if (percent == barLength) then
             barDone = true
             io.write('\n')
@@ -556,6 +556,7 @@ function require(package)
       return false
    end
 end
+_GLOB_.xrequire = require
 
 --------------------------------------------------------------------------------
 -- prints an error with nice formatting. If domain is provided, it is used as
@@ -576,6 +577,26 @@ function error(message, domain, usage)
       _GLOB_.error(col_msg)
    end
 end
+_GLOB_.xerror = error
+
+--------------------------------------------------------------------------------
+-- prints a message with nice formatting. If domain is provided, it is used as
+-- following: <domain> msg
+--------------------------------------------------------------------------------
+function print(message, domain, usage) 
+   if domain then
+      message = '<' .. domain .. '> ' .. message
+   end
+   local c = COLORS
+   local col_msg = c.red .. message .. c.none
+   if usage then
+      print(col_msg)
+      _GLOB_.print(usage)
+   else
+      _GLOB_.print(col_msg)
+   end
+end
+_GLOB_.xprint = print
 
 --------------------------------------------------------------------------------
 -- execute an OS command, but retrieves the result in a string
@@ -594,6 +615,10 @@ function exec(cmd)
    return str
 end
 
+-- execute a string as lua code, useful for arguement parsing
+function exec_string( s )
+   return loadstring( 'return ' .. s )()
+end
 --------------------------------------------------------------------------------
 -- returns the name of the OS in use
 -- warning, this method is extremely dumb, and should be replaced by something
@@ -627,6 +652,22 @@ function ftime(file)
 end
 
 --------------------------------------------------------------------------------
+-- faster file time info (no call to executable)
+--------------------------------------------------------------------------------
+function atime(file)
+   local atime,ctime,mtime = libxlearn.fstat_time(file)
+   return atime
+end
+function ctime(file)
+   local atime,ctime,mtime = libxlearn.fstat_time(file)
+   return ctime
+end
+function mtime(file)
+   local atime,ctime,mtime = libxlearn.fstat_time(file)
+   return mtime
+end
+
+--------------------------------------------------------------------------------
 -- test if a file exist 
 --------------------------------------------------------------------------------
 function parseXML(xmlString)
@@ -647,10 +688,10 @@ function parseXML(xmlString)
 end
 
 --------------------------------------------------------------------------------
--- test if a file exist 
+-- ls
 --------------------------------------------------------------------------------
 do 
-   local listDir = torch.class('listDir')
+   local listDir = torch.class('toolBox.ls')
    function listDir:__init(flags)
       if flags then
          self.flags = flags
@@ -662,36 +703,90 @@ do
       local res = exec('ls '..self.flags)
       return '\n' .. res
    end
+   _GLOB_.ls = toolBox.ls('')
+   _GLOB_.ll = toolBox.ls('-l')
+   _GLOB_.la = toolBox.ls('-a')
+   _GLOB_.lla = toolBox.ls('-la')
 end
+
+--------------------------------------------------------------------------------
+-- pwd
+--------------------------------------------------------------------------------
+do 
+   local pwd = torch.class('toolBox.pwd')
+   function pwd:__init()
+   end
+   function pwd:__tostring__()
+      local res = exec('pwd')
+      return '\n' .. res
+   end
+   _GLOB_.pwd = toolBox.pwd()
+end
+
+--------------------------------------------------------------------------------
+-- restart function
+--------------------------------------------------------------------------------
+function restart() 
+   qt.qApp:restart(true) 
+end
+_GLOB_.restart = restart
 
 --------------------------------------------------------------------------------
 -- this table contains colors for nice shell printing
 --------------------------------------------------------------------------------
-COLORS = {none = '\27[0m',
-          black = '\27[0;30m',
-          red = '\27[0;31m',
-          green = '\27[0;32m',
-          yellow = '\27[0;33m',
-          blue = '\27[0;34m',
-          magenta = '\27[0;35m',
-          cyan = '\27[0;36m',
-          white = '\27[0;37m',
-          Black = '\27[1;30m',
-          Red = '\27[1;31m',
-          Green = '\27[1;32m',
-          Yellow = '\27[1;33m',
-          Blue = '\27[1;34m',
-          Magenta = '\27[1;35m',
-          Cyan = '\27[1;36m',
-          White = '\27[1;37m',
-          _black = '\27[40m',
-          _red = '\27[41m',
-          _green = '\27[42m',
-          _yellow = '\27[43m',
-          _blue = '\27[44m',
-          _magenta = '\27[45m',
-          _cyan = '\27[46m',
-          _white = '\27[47m'}
+if qt and qt.qConsole.captureOutput then
+   COLORS = {none = '',
+             black = '',
+             red = '',
+             green = '',
+             yellow = '',
+             blue = '',
+             magenta = '',
+             cyan = '',
+             white = '',
+             Black = '',
+             Red = '',
+             Green = '',
+             Yellow = '',
+             Blue = '',
+             Magenta = '',
+             Cyan = '',
+             White = '',
+             _black = '',
+             _red = '',
+             _green = '',
+             _yellow = '',
+             _blue = '',
+             _magenta = '',
+             _cyan = '',
+             _white = ''}
+else
+   COLORS = {none = '\27[0m',
+             black = '\27[0;30m',
+             red = '\27[0;31m',
+             green = '\27[0;32m',
+             yellow = '\27[0;33m',
+             blue = '\27[0;34m',
+             magenta = '\27[0;35m',
+             cyan = '\27[0;36m',
+             white = '\27[0;37m',
+             Black = '\27[1;30m',
+             Red = '\27[1;31m',
+             Green = '\27[1;32m',
+             Yellow = '\27[1;33m',
+             Blue = '\27[1;34m',
+             Magenta = '\27[1;35m',
+             Cyan = '\27[1;36m',
+             White = '\27[1;37m',
+             _black = '\27[40m',
+             _red = '\27[41m',
+             _green = '\27[42m',
+             _yellow = '\27[43m',
+             _blue = '\27[44m',
+             _magenta = '\27[45m',
+             _cyan = '\27[46m',
+             _white = '\27[47m'}
+end
 
 --------------------------------------------------------------------------------  
 -- return new tensor of the same size but with only -1 or 1 or 0 vals
@@ -705,6 +800,14 @@ function sign(tensor)
                 end) -- compute the sign
    return result
 end
+
+--------------------------------------------------------------------------------
+-- floor function
+--------------------------------------------------------------------------------
+function round(n)
+   return math.floor(n+0.5)
+end
+_GLOB_.math.round = round
 
 --------------------------------------------------------------------------------
 -- return table dataTable from file filename
@@ -766,4 +869,41 @@ function combinations(n,p)
    for i = n,1,-1 do table.insert(values,i) end
    buildcombi(values,{},p)
    return buffer
+end
+
+--------------------------------------------------------------------------------
+-- torch io read a binary file
+--------------------------------------------------------------------------------
+function readbinaryfile(filename, object)
+   local f = torch.DiskFile(filename):binary()
+   if object then
+      object:read(f)
+   else 
+      object = f:readObject()
+   end
+   f:close()
+   return object
+end
+_GLOB_.readbinaryfile = readbinaryfile
+
+--------------------------------------------------------------------------------
+-- torch io write a binary file
+--------------------------------------------------------------------------------
+function writebinaryfile(filename, object)
+   local f = torch.DiskFile(filename,'w'):binary()
+   object:write(f)
+   f:close()
+   return object
+end
+_GLOB_.writebinaryfile = writebinaryfile
+
+
+--------------------------------------------------------------------------------
+-- simple split function for strings from http://lua-users.org/wiki/SplitJoin
+--------------------------------------------------------------------------------
+function string:split(sep)
+   local sep, fields = sep or ":", {}
+   local pattern = string.format("([^%s]+)", sep)
+   self:gsub(pattern, function(c) fields[#fields+1] = c end)
+        return fields
 end

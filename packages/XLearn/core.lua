@@ -24,3 +24,12 @@ end
 -- extends paths with a home variable
 --------------------------------------------------------------------------------
 paths.home = os.getenv('HOME')
+
+--------------------------------------------------------------------------------
+-- debugger helpers
+--------------------------------------------------------------------------------
+function __breakpoint__()
+   if _DEBUG_ then pause()
+   else xprint('only works if "debugger" is loaded (or luaD is used)','__breakpoint__')
+   end
+end

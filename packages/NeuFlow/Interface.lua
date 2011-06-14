@@ -25,23 +25,29 @@ end
 
 function Interface:ethernetBlockOnBusy()
    local start_again = self.core:processAddress()
+   local goto_tag = self.core:makeGotoTag()
+
    self.core:ioread(oFlower.io_ethernet_status, oFlower.reg_A)
    self.core:bitandi(oFlower.reg_A, 0x00000001, oFlower.reg_A)
-   self.core:gotoAbsoluteIfNonZero(start_again, oFlower.reg_A)
+   self.core:gotoAbsoluteIfNonZero(start_again, oFlower.reg_A, goto_tag)
 end
 
 function Interface:ethernetBlockOnIdle()
    local start_again = self.core:processAddress()
+   local goto_tag = self.core:makeGotoTag()
+
    self.core:ioread(oFlower.io_ethernet_status, oFlower.reg_A)
    self.core:bitandi(oFlower.reg_A, 0x00000001, oFlower.reg_A)
-   self.core:gotoAbsoluteIfZero(start_again, oFlower.reg_A)
+   self.core:gotoAbsoluteIfZero(start_again, oFlower.reg_A, goto_tag)
 end
 
 function Interface:ethernetWaitForPacket()
    local start_again = self.core:processAddress()
+   local goto_tag = self.core:makeGotoTag()
+
    self.core:ioread(oFlower.io_ethernet_status, oFlower.reg_A)
    self.core:bitandi(oFlower.reg_A, 0x00000002, oFlower.reg_A)
-   self.core:gotoAbsoluteIfZero(start_again, oFlower.reg_A)
+   self.core:gotoAbsoluteIfZero(start_again, oFlower.reg_A, goto_tag)
 end
 
 function Interface:ethernetStartTransfer(size)
@@ -134,6 +140,7 @@ function Interface:streamToHost(stream, tag, mode)
    if (nb_packets > 0) then
       self.core:setreg( oFlower.reg_B, nb_packets)
       local stay_in_loop = self.core:processAddress()
+      local goto_tag = self.core:makeGotoTag()
       
       local packet_size = self.max_packet_size
       
@@ -150,7 +157,7 @@ function Interface:streamToHost(stream, tag, mode)
       -- (d) wait for transfer started
       self:ethernetBlockOnIdle()
       self.core:addi(oFlower.reg_B, -1, oFlower.reg_B)
-      self.core:gotoAbsoluteIfNonZero(stay_in_loop, oFlower.reg_B)
+      self.core:gotoAbsoluteIfNonZero(stay_in_loop, oFlower.reg_B, goto_tag)
    end
    
    if(last_packet ~= 0) then
@@ -420,6 +427,7 @@ function Interface:streamFromHost_legacy(stream, tag)
    if (nb_packets > 0) then
       self.core:setreg( oFlower.reg_B, nb_packets)
       local stay_in_loop = self.core:processAddress()
+      local goto_tag = self.core:makeGotoTag()
       local packet_size = self.max_packet_size
       
       -- (a) request a particular nb of bytes from the host
@@ -437,7 +445,7 @@ function Interface:streamFromHost_legacy(stream, tag)
       end
       -- (d) loopback
       self.core:addi(oFlower.reg_B, -1, oFlower.reg_B)
-      self.core:gotoAbsoluteIfNonZero(stay_in_loop, oFlower.reg_B)
+      self.core:gotoAbsoluteIfNonZero(stay_in_loop, oFlower.reg_B, goto_tag)
    end
    
    if(last_packet ~= 0) then

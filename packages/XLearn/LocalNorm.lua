@@ -9,10 +9,14 @@ local help_desc =
 ? if no threshold is given, the global std dev is used
 ? weight replication is used to preserve sizes (this is
   better than zero-padding, but more costly to compute, use
-  nn.ContrastNormalization to use zero-padding)]]
+  nn.ContrastNormalization to use zero-padding)
+? two 1D kernels can be used instead of a single 2D kernel. This
+  is beneficial to integrate information over large neiborhoods.
+]]
 
 local help_example = 
-[[-- create a contrast normalizer, with a 9x9 gaussian kernel
+[[EX:
+-- create a contrast normalizer, with a 9x9 gaussian kernel
 -- works on 8 input feature maps, therefore the mean+dev will
 -- be estimated on 9x9x8 cubes
 stimulus = lab.randn(500,500,8)
@@ -20,20 +24,33 @@ gaussian = image.gaussian{width=9}
 mod = nn.LocalNorm(gaussian, 8)
 result = mod:forward(stimulus)]]
 
-function LocalNorm:__init(ker,nf,thres) -- kernel for weighted mean | nb of features
+function LocalNorm:__init(...) -- kernel for weighted mean | nb of features
    parent.__init(self)
-   self.kernel = ker
+
+   -- get args
+   local args, ker, nf, thres, kers1D
+      = toolBox.unpack(
+      {...},
+      'nn.LocalNorm',
+      help_desc .. '\n' .. help_example,
+      {arg='kernel', type='torch.Tensor', help='a KxK filtering kernel'},
+      {arg='nInputPlane', type='number', help='number of input maps', req=true},
+      {arg='threshold', type='number', help='threshold, for division [default = adaptive]'},
+      {arg='kernels', type='table', help='two 1D filtering kernels (1xK and Kx1)'}
+   )
+
+   -- check args
+   if not ker and not kers1D then
+      xerror('please provide kernel(s)', 'nn.LocalNorm', args.usage)
+   end
+   self.kernel = ker or kers1D
+   local ker2
+   if kers1D then
+      ker = kers1D[1]
+      ker2 = kers1D[2]
+   end
    self.nfeatures = nf
    self.fixedThres = thres -- optional, if not provided, the global std is used
-
-   if not ker or not nf or type(ker) ~= 'userdata' then
-      error(toolBox.usage('nn.LocalNorm',
-                          help_desc,
-                          help_example,
-                          {type='torch.Tensor', help='a KxK filtering kernel', req=true},
-                          {type='number', help='number of input maps', req=true},
-                          {type='number', help='threshold, for division'}))
-   end
 
    -- padding values
    self.padW = math.floor(ker:size(1)/2)
@@ -41,8 +58,20 @@ function LocalNorm:__init(ker,nf,thres) -- kernel for weighted mean | nb of feat
    self.kerWisPair = 0
    self.kerHisPair = 0
 
+   -- padding values for 2nd kernel
+   if ker2 then
+      self.pad2W = math.floor(ker2:size(1)/2)
+      self.pad2H = math.floor(ker2:size(2)/2)
+   else
+      self.pad2W = 0
+      self.pad2H = 0
+   end
+   self.ker2WisPair = 0
+   self.ker2HisPair = 0
+
    -- normalize kernel
-   self.kernel:div(self.kernel:sum())
+   ker:div(ker:sum())
+   if ker2 then ker2:div(ker2:sum()) end
 
    -- manage the case where ker is even size (for padding issue)
    if (ker:size(1)/2 == math.floor(ker:size(1)/2)) then
@@ -53,33 +82,86 @@ function LocalNorm:__init(ker,nf,thres) -- kernel for weighted mean | nb of feat
       print ('Warning, kernel height is even -> not symetric padding')
       self.kerHisPair = 1
    end
+   if (ker2 and ker2:size(1)/2 == math.floor(ker2:size(1)/2)) then
+      print ('Warning, kernel width is even -> not symetric padding')
+      self.ker2WisPair = 1
+   end
+   if (ker2 and ker2:size(2)/2 == math.floor(ker2:size(2)/2)) then
+      print ('Warning, kernel height is even -> not symetric padding')
+      self.ker2HisPair = 1
+   end
    
    -- create convolution for computing the mean
-   self.convo = nn.Sequential()
-   self.convo:add(nn.SpatialPadding(self.padW,self.padW-self.kerWisPair,
-                                      self.padH,self.padH-self.kerHisPair))
+   convo1 = nn.Sequential()
+   convo1:add(nn.SpatialPadding(self.padW,self.padW-self.kerWisPair,
+                                    self.padH,self.padH-self.kerHisPair))
    local ctable = nn.SpatialConvolutionTable:OneToOneTable(nf)
-   self.convo:add(nn.SpatialConvolutionTable(ctable,ker:size(1),ker:size(2)))
-   self.convo:add(nn.Sum(3))
-   self.convo:add(nn.Replicate(nf))
+   convo1:add(nn.SpatialConvolutionTable(ctable,ker:size(1),ker:size(2)))
+   convo1:add(nn.Sum(3))
+   convo1:add(nn.Replicate(nf))
    -- set kernel
-   local fb = self.convo.modules[2].weight
+   local fb = convo1.modules[2].weight
    for i=1,fb:size(3) do fb:select(3,i):copy(ker) end
    -- set bias to 0
-   self.convo.modules[2].bias:zero()
+   convo1.modules[2].bias:zero()
+
+   -- 2nd ker ?
+   if ker2 then
+      local convo2 = nn.Sequential()
+      convo2:add(nn.SpatialPadding(self.pad2W,self.pad2W-self.ker2WisPair,
+                                   self.pad2H,self.pad2H-self.ker2HisPair))
+      local ctable = nn.SpatialConvolutionTable:OneToOneTable(nf)
+      convo2:add(nn.SpatialConvolutionTable(ctable,ker2:size(1),ker2:size(2)))
+      convo2:add(nn.Sum(3))
+      convo2:add(nn.Replicate(nf))
+      -- set kernel
+      local fb = convo2.modules[2].weight
+      for i=1,fb:size(3) do fb:select(3,i):copy(ker2) end
+      -- set bias to 0
+      convo2.modules[2].bias:zero()
+      -- convo is a double convo now:
+      local convopack = nn.Sequential()
+      convopack:add(convo1)
+      convopack:add(convo2)
+      self.convo = convopack
+   else
+      self.convo = convo1
+   end
 
    -- create convolution for computing the meanstd
-   self.convostd = nn.Sequential()
-   self.convostd:add(nn.SpatialPadding(self.padW,self.padW-self.kerWisPair,
+   convostd1 = nn.Sequential()
+   convostd1:add(nn.SpatialPadding(self.padW,self.padW-self.kerWisPair,
                                       self.padH,self.padH-self.kerHisPair))
-   self.convostd:add(nn.SpatialConvolutionTable(ctable,ker:size(1),ker:size(2)))
-   self.convostd:add(nn.Sum(3))
-   self.convostd:add(nn.Replicate(nf))
+   convostd1:add(nn.SpatialConvolutionTable(ctable,ker:size(1),ker:size(2)))
+   convostd1:add(nn.Sum(3))
+   convostd1:add(nn.Replicate(nf))
    -- set kernel
-   local fb = self.convostd.modules[2].weight
+   local fb = convostd1.modules[2].weight
    for i=1,fb:size(3) do fb:select(3,i):copy(ker) end
    -- set bias to 0
-   self.convostd.modules[2].bias:zero()
+   convostd1.modules[2].bias:zero()
+
+   -- 2nd ker ?
+   if ker2 then
+      local convostd2 = nn.Sequential()
+      convostd2:add(nn.SpatialPadding(self.pad2W,self.pad2W-self.ker2WisPair,
+                                   self.pad2H,self.pad2H-self.ker2HisPair))
+      convostd2:add(nn.SpatialConvolutionTable(ctable,ker2:size(1),ker2:size(2)))
+      convostd2:add(nn.Sum(3))
+      convostd2:add(nn.Replicate(nf))
+      -- set kernel
+      local fb = convostd2.modules[2].weight
+      for i=1,fb:size(3) do fb:select(3,i):copy(ker2) end
+      -- set bias to 0
+      convostd2.modules[2].bias:zero()
+      -- convo is a double convo now:
+      local convopack = nn.Sequential()
+      convopack:add(convostd1)
+      convopack:add(convostd2)
+      self.convostd = convopack
+   else
+      self.convostd = convostd1
+   end
 
    -- other operation
    self.squareMod = nn.Square()
@@ -99,9 +181,6 @@ function LocalNorm:__init(ker,nf,thres) -- kernel for weighted mean | nb of feat
    self.inVar = torch.Tensor()
    self.inStdDev = torch.Tensor()
    self.thstd = torch.Tensor()
-
-   -- link output to the last module forwarded
-   self.output = self.diviseMod.output
 end
 
 --------------------------------------------------------------------------------
@@ -134,8 +213,7 @@ function LocalNorm:forward(input)
    end
    self.input = input
    if (input:nDimension() == 2) then
-      self.input = torch.Tensor(input:size(1),input:size(2),1)
-      self.input:copy(input)
+      self.input = torch.Tensor():resize(input:size(1),input:size(2),1):copy(input)
    end
    -- compute mean
    self.inConvo = self.convo:forward(self.input)
@@ -164,18 +242,14 @@ function LocalNorm:forward(input)
    
    --remove std dev
    self.diviseMod:forward({self.inputZeroMean,self.stdDev})
+   self.output = self.diviseMod.output
    return self.output
 end
 
 function LocalNorm:backward(input, gradOutput)
    self.input = input
    if (input:nDimension() == 2) then
-      if not self.warned then
-         print ('Warning: 2D input, resizing to 3D')
-         self.warned = true
-      end
-      self.input = torch.Tensor(input:size(1),input:size(2),1)
-      self.input:copy(input)
+      self.input = torch.Tensor():resize(input:size(1),input:size(2),1):copy(input)
    end
    self.gradInput:resizeAs(self.input):zero()
    local gradDiv = self.diviseMod:backward({self.inputZeroMean,self.stdDev},gradOutput)
@@ -201,6 +275,26 @@ function LocalNorm:backward(input, gradOutput)
    return self.gradInput
 end
 
+function LocalNorm:empty()
+   self.gradInput:resize()
+   self.gradInput:storage():resize(0)
+   self.output:resize()
+   self.output:storage():resize(0)
+   self.convo:empty()
+   self.convostd:empty()
+   self.squareMod:empty()
+   self.sqrtMod:empty()
+   self.squareMod:empty()
+   self.sqrtMod:empty()
+   self.substractMod:empty()
+   self.meanDiviseMod:empty()
+   self.stdDiviseMod:empty()
+   self.thresMod:empty()
+   self.diviseMod:empty()
+   self.coef:resize(1,1)
+   self.coef:storage():resize(1)
+end
+
 function LocalNorm:write(file)
    parent.write(self,file)
    file:writeObject(self.kernel)
@@ -219,6 +313,12 @@ function LocalNorm:write(file)
    file:writeObject(self.thresMod)
    file:writeObject(self.diviseMod)
    file:writeObject(self.coef)
+   if type(self.kernel) == 'table' then
+      file:writeInt(self.pad2W)
+      file:writeInt(self.pad2H)
+      file:writeInt(self.ker2WisPair)
+      file:writeInt(self.ker2HisPair)
+   end
 end
 
 function LocalNorm:read(file)
@@ -239,4 +339,10 @@ function LocalNorm:read(file)
    self.thresMod = file:readObject()
    self.diviseMod = file:readObject()
    self.coef = file:readObject()
+   if type(self.kernel) == 'table' then
+      self.pad2W = file:readInt()
+      self.pad2H = file:readInt()
+      self.ker2WisPair = file:readInt()
+      self.ker2HisPair = file:readInt()
+   end
 end

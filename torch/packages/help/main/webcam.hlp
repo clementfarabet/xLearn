@@ -1,0 +1,23 @@
+<extended>Interfacing with your webcam, or other video sources.
+
+To be documented.
+
+For now, simply checkout =demos/test-cam.lua=, or =demos/face-detect-multiscale.lua=
+
+In particular, you can run a pre-trained network to detect faces in a video stream:
+<verbatim>
+$ cd demos
+
+$ ./face-detect-multiscale.lua
+-- this detects faces in your webcam stream
+
+$ ./face-detect-multiscale.lua -h
+-- displays help 
+
+$ ./face-detect-multiscale.lua -s video -p /path/to/videofile
+-- this runs the face detector on some video (requires ffmpeg)
+</verbatim>
+
+The pre-trained network is loaded from =trained-nets/network-face-detect=.
+Note that this network was trained very quickly, and is given here for 
+demonstration.

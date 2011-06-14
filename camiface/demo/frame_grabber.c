@@ -333,7 +333,7 @@ int main(int argc, char** argv) {
     fprintf(stderr,"couldn't allocate memory in %s, line %d\n",__FILE__,__LINE__);
     exit(1);
   }
-  printf("allocated %dB for raw pixels", buffer_size);
+  printf("allocated %dB for raw pixels\n", buffer_size);
 
   // ... and start camera !!
   CamContext_start_camera(cc);
@@ -349,7 +349,10 @@ int main(int argc, char** argv) {
     printf("  %d: %s\n",i,mode_string);
   }
   printf("\n");
-  
+
+  // setting framerate
+  // CamContext_set_framerate(cc, 1);
+
   // Init frame buffer
   buffer->bytes_per_pixel = 3; // RGB
   buffer->request_frame = 0;
@@ -366,7 +369,7 @@ int main(int argc, char** argv) {
       if (processingStopped) goto cleanup; // sigint received
       if (getppid() == 1) goto cleanup; // parent died
       if (argc > 1) break; // standalone mode
-      usleep(1000); // save CPU
+      usleep(1); // save CPU
     }
     // frame's not ready anymore
     buffer->frame_ready = 0;
@@ -399,7 +402,6 @@ int main(int argc, char** argv) {
     }
 
     sleep(sleep_btn_frames); // Time between snapshots
-    sleep(0.01); // save CPU
 
     n_frames++;
   }

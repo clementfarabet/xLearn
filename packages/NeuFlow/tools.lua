@@ -23,14 +23,21 @@ function toolBox.readBinWriteHex(input, output, word_width, requested_size_b)
    while true do
       local bytes = file_bin:read(word_width)
       if not bytes then 
-	 file_bin:close()
-	 break end
+	      file_bin:close()
+	      break
+      end
       local mem_word = {}
       local i = 0
       for b in string.gfind(bytes, ".") do
          mem_word[i] = b
          i = i+1
       end
+
+      -- pad incomplete word with zeros
+      for i = (i+1), word_width do
+         file_hex:write("00")
+      end
+
       for i = #mem_word,0,-1 do
          file_hex:write(string.format("%02X", string.byte(mem_word[i])))
       end
@@ -128,6 +135,402 @@ function table.reverse(t)
       table.insert(out, t[i])
    end
    return out
+end
+
+
+----------------------------------------------------------------------
+--- this function disassembles some binary code
+-- @param binary      a table of bytes
+-- @param [offset]    optional offset
+-- @param [length]    optional length
+--
+function toolBox.disassemble(binary, args)
+   -- process args
+   args = args or {}
+   local offset = args.offset or 1
+   local length = args.length or #binary
+   local nonop = args.nonop or false
+   print('+++ DisAssembly +++')
+
+   -- use colors
+   local C = toolBox.COLORS
+
+   -- opcode list
+   local opcodes = {'writeConfig',
+                    'getStatus',
+                    'writeStream',
+                    'routeStream',
+                    'writeWord',
+                    'readWord',
+                    'setReg',
+                    'goto',
+                    'add',
+                    'control',
+                    'and',
+                    'or',
+                    'comp',
+                    'shr',
+                    'nop',
+                    'term'}
+
+   -- opcode list
+   local instructions = {'select',
+                         'setAddr',
+                         'activate',
+                         'deActivate',
+                         'reset',
+                         'UNUSED',
+                         'control_0',
+                         'control_1',
+                         'control_2',
+                         'control_3', 
+                         'control_4', 
+                         'control_5',
+                         'control_6', 
+                         'control_7', 
+                         'cacheStart', 
+                         'cacheFinish', 
+                         'nop',
+                         'term'}
+
+   -- config statuses
+   local statuses = {'notAddressed',
+                     'idle',
+                     'busy',
+                     'done',
+                     'primed',
+                     'unconfigured',
+                     'misconfigured'}
+
+   -- we keep track of active/unactive ports/tiles
+   local selected = nil
+   local tiles = {conv={}, mapp={}, valu={}}
+   for t = 1,grid.nb_convs do
+      tiles.conv[t] = {active = false}
+   end
+   for t = 1,grid.nb_mappers do
+      tiles.mapp[t] = {active = false}
+   end
+   for t = 1,grid.nb_alus do
+      tiles.valu[t] = {active = false}
+   end
+   local ports = {}
+   for p = 1,streamer.nb_ports do
+      ports[p] = {active = false, mode = 'read', cache = 'unset'}
+   end
+
+   -- this function prints the states of all tiles/ports
+   local status = function()
+                     -- all tiles
+                     io.write('{')
+                     for _,tile in pairs(tiles) do
+                        for _,t in ipairs(tile) do
+                           io.write(' ')
+                           local state
+                           if t.active then 
+                              state = C.Red .. 'A' .. C.none
+                           else
+                              state = C.yellow .. '.' .. C.none
+                           end
+                           io.write(state)
+                        end
+                     end
+                     io.write(' }  ')
+
+                     -- all ports
+                     io.write('{')
+                     for i,port in ipairs(ports) do
+                        io.write(' ')
+                        local state
+                        if port.active then 
+                           if port.mode == 'read' then
+                              if port.cache == 'unset' then
+                                 state = C.Green .. 'R' .. C.none
+                              else
+                                 state = C.Green .. C._white .. 'R' .. C.none
+			      end
+                           else
+                              if port.cache == 'unset' then
+                                 state = C.Red .. 'W' .. C.none
+                              else
+                                 state = C.Red .. C._white .. 'W' .. C.none
+			      end
+                           end
+                        else
+                           if port.cache == 'unset' then
+                              state = C.yellow .. '.' .. C.none
+                           else
+                              state = C.yellow .. C._white .. '.' .. C.none
+                           end
+                        end
+                        io.write(state)
+                     end
+                     io.write(' }  ')
+                  end
+   local statuslegend = function()
+                           -- all tiles
+                           io.write('{')
+                           local i=0
+                           for _,tile in pairs(tiles) do
+                              for _,t in ipairs(tile) do
+                                 io.write(' ')
+                                 io.write(string.format('%X',i))
+                                 i = i + 1
+                              end
+                           end
+                           io.write(' }  ')
+
+                           -- all ports
+                           io.write('{')
+                           for i,port in ipairs(ports) do
+                              io.write(' ')
+                              io.write(string.format('%X',i-1))
+                           end
+                           io.write(' }\n')
+                        end
+   local statusheader = function()
+                           statuslegend()
+                        end
+   local statusfooter = function()
+                           statuslegend()
+
+                           -- tiles
+                           io.write(' ')
+                           for k,tile in pairs(tiles) do
+                              io.write(' ')
+                              io.write('\\')
+                              io.write(k)
+                              local padding = #tile*2 - k:len() - 3
+                              for i = 1,padding do io.write(' ') end
+                              io.write('/')
+                           end
+                           io.write('    ')
+
+                           -- ports
+                           io.write('  \\ ')
+                           local str = 'DRAM Ports'
+                           io.write(str)
+                           local padding = #ports*2 - str:len() - 4
+                           for i = 1,padding do io.write(' ') end
+                           io.write('/\n')
+                        end
+
+   -- print headers
+   statusheader()
+
+   -- process all instructions
+   local i = 0
+   while true do
+      -- current offset
+      local off = offset+i
+
+      -- print status of all ports
+      status()
+
+      -- get opcode
+      local opcode = opcodes[binary[off+7]+1] or 'UNKNOWN'
+      if not (nonop and opcode == 'nop') then
+         io.write(C._red .. opcode .. C.none)
+      end
+
+      -- get args
+      local arg8_1 = binary[off+6]
+      local arg8_2 = binary[off+5]
+      local arg8_3 = binary[off+4]
+      local arg8_4 = binary[off+3]
+      local arg8_5 = binary[off+2]
+      local arg8_6 = binary[off+1]
+      local arg8_7 = binary[off+0]
+      local arg32_1 = binary[off] + 256*binary[off+1] 
+                                  + 256*256*binary[off+2] 
+                                  + 256*256*256*binary[off+3]
+
+      -- get args, depending on type of instruction:
+      if opcode == 'writeStream' then
+         io.write('\n\n' .. C.magenta)
+
+         -- get data length
+         local data_length = arg32_1
+
+         -- print attached data:
+         for l = 1,math.ceil(data_length/8) do
+            i = i + 8
+            for k = 0,7 do
+               io.write(string.format("%c", binary[offset+i+k]))
+            end
+         end
+         io.write(C.none)
+
+      elseif opcode == 'getStatus' then
+         -- print expected status
+         io.write('   ')
+         io.write(C.blue)
+         local sts = statuses[arg8_1+1]
+         io.write(sts)
+         io.write(C.none)
+         local deadcycles = arg8_2
+
+         if sts == 'primed' then
+            -- very rough estimate of how much time it takes for a port to get primed
+            -- this actually depends on lots of factors: bandwidth, size of read buffers,
+            -- and number of concurrent reads initiated...
+            deadcycles = deadcycles + 256 * (oFlower.clock_freq / streamer.clock_freq)
+         end
+
+         if sts == 'done' and selected.mode == 'write' then
+            -- estimate the time of the DMA transfer, and normalize in CPU cycles
+            local dmacycles = selected.length * (oFlower.clock_freq / streamer.clock_freq)
+            deadcycles = deadcycles + dmacycles
+         end
+
+         -- print a rough estimates of dead cycles...
+         io.write('\n') status() io.write('.......')
+         io.write('\n') status()
+         io.write('waiting for approx. ') io.write(C.Red) io.write(deadcycles)
+         io.write(C.none) io.write(' cycles')
+         io.write('\n') status() io.write('.......')
+
+      elseif opcode == 'writeConfig' then
+         -- get type
+         if arg8_1 == blast_bus.content_config then
+            io.write(' raw data: ')
+            io.write(string.format('0x%08X', arg32_1))
+
+            -- keep track of pushed packets
+            if selected.submod then
+               selected.nthconfig = selected.nthconfig + 1 
+
+               -- some config packets are relevant
+               if selected.submod == 'locals' then
+                  if selected.nthconfig == 3 then
+                     selected.length = arg32_1
+                  elseif selected.nthconfig == 4 then
+                     selected.length = arg32_1 * selected.length
+                  elseif selected.nthconfig == 5 then
+                     selected.mode = ((arg32_1 == 1) and 'read') or 'write'
+                  end
+               end
+            end
+
+         elseif arg8_1 == blast_bus.content_instruc then
+            io.write(' command: ')
+            local instr = instructions[arg8_7+1]
+            io.write(C.yellow .. instr .. C.none)
+            
+            -- update port/tile status
+            if instr == 'activate' then
+               selected.active = true
+            elseif instr == 'deActivate' then
+               selected.active = false
+            elseif instr == 'cacheStart' then
+               selected.cache = 'set'
+            elseif instr == 'cacheFinish' then
+               selected.cache = 'unset'
+            end
+
+         elseif arg8_1 == blast_bus.content_command then
+            io.write(' command: ')
+            local instr = instructions[arg8_7+1]
+            io.write(C.yellow .. instr .. C.none)
+
+            -- the following code disassembles addresses
+            io.write(' [')
+            local addr = arg8_5 + 256*arg8_4
+            local mod
+            if bit.band(2^12,addr) ~= 0 then
+               mod = 'DRAM port'
+            elseif bit.band(2^13,addr) ~= 0 then
+               mod = 'Compute Tile'
+            end
+            io.write(mod)
+            io.write(' ')
+            local subaddr = bit.band(2^12-1, addr)
+            if subaddr == 0 then
+               io.write('ALL')
+               selected = {}
+            else
+               if mod == 'Compute Tile' then
+                  if subaddr >= 256 then
+                     io.write('GRID')
+                     selected = {}
+                  elseif subaddr >= 24 then
+                     io.write('MAPP ')
+                     io.write(subaddr-24)
+                     selected = tiles.mapp[subaddr-24+1]
+                  elseif subaddr >= 16 then
+                     io.write('VALU ')
+                     io.write(subaddr-16)
+                     selected = tiles.valu[subaddr-16+1]
+                  else
+                     io.write('CONV ')
+                     io.write(subaddr-1)
+                     selected = tiles.mapp[subaddr]
+                  end
+               elseif mod == 'DRAM port' then
+                  io.write(subaddr-1)
+                  selected = ports[subaddr]
+               end
+            end
+            io.write(', submod = ')
+            local modaddr = arg8_6
+            if mod == 'Compute Tile' then
+               if modaddr == blast_bus.subAddr_router then
+                  io.write('internal router')
+                  selected.submod = 'irouter'
+                  selected.nthconfig = 0
+               elseif modaddr == blast_bus.subAddr_operator then
+                  io.write('operator')
+                  selected.submod = 'operator'
+                  selected.nthconfig = 0
+               elseif modaddr == blast_bus.subAddr_cacher then
+                  io.write('cache')
+                  selected.submod = 'cache'
+                  selected.nthconfig = 0
+               elseif modaddr == blast_bus.subAddr_IO then
+                  io.write('global router')
+                  selected.submod = 'grouter'
+                  selected.nthconfig = 0
+               end
+            elseif mod == 'DRAM port' then
+               if modaddr == blast_bus.subAddr_memTimeouts then
+                  io.write('timeouts')
+                  selected.submod = 'timeouts'
+                  selected.nthconfig = 0
+               elseif modaddr == blast_bus.subAddr_memGlobals then
+                  io.write('globals')
+                  selected.submod = 'globals'
+                  selected.nthconfig = 0
+               elseif modaddr == blast_bus.subAddr_memLocals then
+                  io.write('locals')
+                  selected.submod = 'locals'
+                  selected.nthconfig = 0
+               end
+            else
+               io.write(modaddr)
+            end
+            io.write(']')
+
+         elseif arg8_1 == blast_bus.content_nothing then
+            io.write(' clear')
+         end
+
+      end
+
+      -- cleanup line
+      if not (nonop and opcode == 'nop') then
+         print('')
+      end
+
+      -- go to next instruction
+      i = i + 8
+      if i == length then break end
+   end
+
+   -- print headers (as a reminder)
+   statusfooter()
+
+   -- done...
+   print('--- DisAssembly ---')
 end
 
 
@@ -347,7 +750,9 @@ function math.approx2(args)
    for i = 2,num_of_points do
       points[i] = points[i-1] + step
       -- DEBUG
-      --print('point #', i,'is ', points[i])
+      --if (points[i] < 3) then
+--	 print('point #'..i..' is '..points[i])
+  --    end
    end
 
    -- generate mapping
@@ -356,8 +761,8 @@ function math.approx2(args)
    for i = 1,num_of_points do
       mapping[i] = mapping_func(points[i])
       -- DEBUG
-      -- if (points[i] < 3) then
- 	-- print('point ', points[i],'mapping is ', mapping[i])
+       --if (points[i] < 3) then
+ 	-- print('point '..points[i]..' mapping is '..mapping[i])
        --end
    end
 
@@ -379,7 +784,7 @@ function math.approx2(args)
   
    
 
-   local lo = epsilon
+   local lo = epsilon/2 -- use this value "epsilon-1/256" if you approximatly know the value for epsilon and want it to finish faster
    local hi = 2*epsilon
    local got_less = false
    local real_num_of_segs = 1
@@ -560,15 +965,15 @@ function math.approx2(args)
 --   	 print('min(',i,') = ', seg_table[i].min)
 --       end
 
-     if (hi - lo > 1/1024) then
+     if (hi - lo > 1/2048) then
       --os.exit()
      -- if ( real_num_of_segs ~= num_of_segs) then
 	 print('WARNING: did not reach the needed number of segments for precision: ', epsilon)
 	 
 	 if ( real_num_of_segs > num_of_segs) then
 	    if (got_less) then
-	       --lo = epsilon
-	       hi = epsilon
+	       lo = epsilon
+	       --hi = epsilon
 	       epsilon = lo + (hi-lo)/2
 	    else
 	       epsilon = epsilon * 2
@@ -586,7 +991,7 @@ function math.approx2(args)
 	 print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> setting precision to: ', epsilon)
 	 
       else 
-	 print('WARNING: got to hi - lo < 1/512.... ')
+	 print('WARNING: got to hi - lo < 1/2048.... ')
 	 print('number of segments reached = ', real_num_of_segs)
 	 print('precision reached = ', epsilon)
 	 print('exiting...')
@@ -694,7 +1099,7 @@ end
 --    * f(x) = 1, if x > 1,
 --    * f(x) = -1, if x < -1,
 --    * f(x) = x, otherwise. 
-function math.HardTanh(args)
+function math.approx_HardTanh(args)
    local num_of_segs = args.nbSegments or 8
    
    local seg_table = {}

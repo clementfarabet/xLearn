@@ -2,25 +2,32 @@ local StochasticTrainer, parent = torch.class('nn.StochasticTrainer','nn.Trainer
 
 function StochasticTrainer:__init(module, criterion, preprocessor)
    parent.__init(self)
+   -- load given module
    self.module = module
+   -- load builtin criterion, or user criterion
    if criterion == 'MSE' then
       self.criterion = nn.MSECriterion()
    elseif criterion == 'NLL' then
       self.criterion = nn.ClassNLLCriterion()
       self.maxTarget = true
-   elseif criterion == 'MALIS' then
-      self.criterion = nn.MalisCriterion()
-      self.errorArray = true
    else
       self.criterion = criterion    
    end
+   -- use optional preprocessor
    self.preprocessor = preprocessor
+   -- public options
+   self.dispProgress = true
+   self.skipUniformTargets = false
+   self.errorArray = false
+   self.maxTarget = self.maxTarget or false
+   self.weightDecay = 0
+   -- private
    self.trainOffset = 0
    self.testOffset = 0
 end
 
 function StochasticTrainer:train(dataset)
-   self.epoch = 1
+   self.epoch = self.epoch or 1
    local currentLearningRate = self.learningRate
    local module = self.module
    local criterion = self.criterion
@@ -41,50 +48,76 @@ function StochasticTrainer:train(dataset)
 
       self.currentError = 0
       for t = 1,dataset:size() do
-         toolBox.dispProgress(t, dataset:size())
+         -- disp progress
+         if self.dispProgress then
+            toolBox.dispProgress(t, dataset:size())
+         end
+
+         -- load new sample
          local sample = dataset[self.trainOffset + shuffledIndices[t]]
          local input = sample[1]
          local target = sample[2]
+         local sample_x = sample.x
+         local sample_y = sample.y
+
+         -- get max of target ?
          if self.maxTarget then
             target = torch.Tensor(target:nElement()):copy(target)
             _,target = lab.max(target)
             target = target[1]
          end
 
-         -- optional preprocess
-         if self.preprocessor then input = self.preprocessor:forward(input) end
-
-         -- forward through model
-         local modelOut = module:forward(input)
-
-         -- resize target ?
-         if self.errorArray then
-            local w = modelOut:size(1)
-            local x = (target:size(1) - w)/2 + 1
-            local h = modelOut:size(2)
-            local y = (target:size(2) - h)/2 + 1
-            target = target:narrow(1,x,w):narrow(2,y,h)
+         -- is target uniform ?
+         local isUniform = false
+         if self.errorArray and target:min() == target:max() then
+            isUniform = true
          end
 
-         -- compute error through criterion
-         local error = criterion:forward(modelOut, target)
+         -- perform SGD step
+         if not (self.skipUniformTargets and isUniform) then
+            -- optional preprocess
+            if self.preprocessor then input = self.preprocessor:forward(input) end
 
-         -- criterion type
-         self.currentError = self.currentError + error
+            -- forward through model and criterion 
+            -- (if no criterion, it is assumed to be contained in the model)
+            local modelOut, error
+            if criterion then
+               modelOut = module:forward(input)
+               error = criterion:forward(modelOut, target)
+            else
+               modelOut, error = module:forward(input, target, sample_x, sample_y)
+            end
 
-         -- backward through model
-         module:zeroGradParameters()
-         local derror = criterion:backward(module.output, target)
-         module:backward(input, derror)
+            -- accumulate error
+            self.currentError = self.currentError + error
 
+            -- backward through model
+            -- (if no criterion, it is assumed that derror is internally generated)
+            module:zeroGradParameters()
+            if criterion then
+               local derror = criterion:backward(module.output, target)
+               module:backward(input, derror)
+            else
+               module:backward(input)
+            end
+
+            -- weight decay ?
+            if self.weightDecay ~= 0 then
+               module:decayParameters(self.weightDecay)
+            end
+
+            -- update parameters in the model
+            module:updateParameters(currentLearningRate)
+         end
+
+         -- call user hook, if any
          if self.hookTrainSample then
             self.hookTrainSample(self, sample)
          end
-         module:updateParameters(currentLearningRate)
       end
 
       self.currentError = self.currentError / dataset:size()
-      print("# current error = " .. self.currentError)
+      print("# train current error = " .. self.currentError)
 
       if self.hookTrainEpoch then
          self.hookTrainEpoch(self)
@@ -125,24 +158,41 @@ function StochasticTrainer:test(dataset)
    end
    
    for t = 1,dataset:size() do
-      toolBox.dispProgress(t, dataset:size())
+      -- disp progress
+      if self.dispProgress then
+         toolBox.dispProgress(t, dataset:size())
+      end
+
+      -- get new sample
       local sample = dataset[self.testOffset + shuffledIndices[t]]
       local input = sample[1]
       local target = sample[2]
+
+      -- max target ?
       if self.maxTarget then
          target = torch.Tensor(target:nElement()):copy(target)
          _,target = lab.max(target)
          target = target[1]
       end
+      
+      -- test sample through current model
       if self.preprocessor then input = self.preprocessor:forward(input) end
-      self.currentError = self.currentError + criterion:forward(module:forward(input), target)
+      if criterion then
+         self.currentError = self.currentError + 
+	    criterion:forward(module:forward(input), target)
+      else
+         local _,error = module:forward(input, target)
+         self.currentError = self.currentError + error
+      end
+
+      -- user hook
       if self.hookTestSample then
          self.hookTestSample(self, sample)
       end
    end
 
    self.currentError = self.currentError / dataset:size()
-   print("# current error = " .. self.currentError)
+   print("# test current error = " .. self.currentError)
 
 
    if self.hookTestEpoch then

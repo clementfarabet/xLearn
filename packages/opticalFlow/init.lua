@@ -282,6 +282,165 @@ if not opticalFlow then
            -- done
            return rgb
         end
+
+   ------------------------------------------------------------
+   -- Simplifies display of flow field in HSV colorspace when the
+   -- available field is in x,y displacement
+   --
+   -- @usage opticalFlow.xy2rgb() -- prints online help
+   --
+   -- @param x  flow field (x), (WxH) [required] [type = torch.Tensor]
+   -- @param y  flow field (y), (WxH) [required] [type = torch.Tensor]
+   ------------------------------------------------------------
+   xy2rgb = function (...)
+	       -- check args
+	       local args, x, y, max = toolBox.unpack(
+		  {...},
+		  'opticalFlow.xy2rgb',
+		  'merges x and y flow fields into a single RGB image,\n'
+		     .. 'where saturation=intensity, and hue=direction',
+		  {arg='x', type='torch.Tensor', help='flow field (norm), (WxH)', req=true},
+		  {arg='y', type='torch.Tensor', help='flow field (angle), (WxH)', req=true},
+		  {arg='max', type='number', help='if not provided, norm:max() is used'}
+	       )
+	       
+	       local norm = computeNorm(x,y)
+	       local angle = computeAngle(x,y)
+	       return field2rgb(norm,angle,max)
+	    end
+
+
+   
+   ------------------------------------------------------------
+   -- Function to read .flo files from middlebury
+   ------------------------------------------------------------
+   readflo = function (...)
+	     local args, filename, setoutofband = toolBox.unpack(
+		{...},
+		'opticalFlow.readflo',
+		'read a .flo file from middlebury',
+		{arg='filename',type='string', help='filename to be read',
+		 req=true},
+		{arg='setoutofband',type='boolean',
+		 help='reset out of band values to 0',default=false}
+	     )
+	     if not paths.filep(filename) then
+		xerror(filename..' does not exist','opticalFlow.readflo()')
+	     end
+	     TAG_FLOAT = 202021.25
+	     local ff = torch.DiskFile(filename)
+	     ff:binary()
+	     local tag = ff:readFloat()
+	     if tag ~= TAG_FLOAT then
+		xerror('unable to read '..filename..
+		       ' perhaps bigendian error','opticalFlow.readflo()')
+	     end
+
+	     local w = ff:readInt()
+	     local h = ff:readInt()
+	     local nbands = 2
+	     local tf = torch.FloatTensor(nbands,w,h)
+	     ff:readFloat(tf:storage())
+	     local td = torch.Tensor(w,h,nbands)
+	     -- make compatible with XLearn flows
+	     td:select(3,1):copy(tf:select(1,1))
+	     td:select(3,2):copy(tf:select(1,2))
+	     -- the middlebury flow files set out of range to 1.6666e-9
+	     if setoutofband then 
+		local ts = td:storage()
+		local maxflow = math.max(w,h)
+		for i = 1,td:nElement() do
+		   if ts[i] > maxflow then 
+		      ts[i] = 0
+		   end
+		end
+	     end
+	     ff:close()
+	     return td
+	  end
+
+   ------------------------------------------------------------
+   -- Function to write .flo files from middlebury
+   ------------------------------------------------------------
+
+   writeflo = function (...)
+	     local args, flow, filename = toolBox.unpack(
+		{...},
+		'opticalFlow.writeflo',
+		'write an x,y flow to the .flo file format from middlebury',
+		{arg='flow',type='torch.Tensor',
+		 help='flow tensor to be written [w][h][2]',req=true},
+		{arg='filename',type='string', 
+		 help='filename to be written',req=true}
+	     )
+	     if paths.filep(filename) then
+		xerror(filename..' exists','opticalFlow.writeflo()')
+	     end
+	     if not filename:match('.flo$') then
+		filename = filename..'.flo'
+	     end
+	     TAG_FLOAT = 202021.25
+	     local ff = torch.DiskFile(filename,'w')
+	     ff:binary()
+	     ff:writeFloat(TAG_FLOAT)
+
+	     local w = flow:size(1)
+	     local h = flow:size(2)
+	     local nbands = flow:size(3)
+	     if nbands > 2 then
+		print('only writing first 2 slices in 3 dim of flow')
+		nbands = 2
+	     elseif nbands < 2 then
+		xerror('flow tensor must have x and y values format [w][h][2] where the last dim is x and y','flowFile.write')
+	     end
+	     ff:writeInt(w)
+	     ff:writeInt(h)
+	     local tt = torch.FloatTensor(nbands,w,h)
+	     -- make compatible with XLearn flows
+	     tt:select(1,1):copy(flow:select(3,1))
+	     tt:select(1,2):copy(flow:select(3,2)) 
+	     ff:writeFloat(tt:storage())
+	     ff:close()
+	     return 1
+	  end
+
+   ------------------------------------------------------------
+   -- Function to test .flo IO code for files from middlebury
+   ------------------------------------------------------------
+   testfloIO = function (...) 
+	     local args, filename, tmpfilename = toolBox.unpack(
+		{...},
+		'opticalFlow.testfloIO',
+		'read a .flo file format, write a copy and compare',
+		{arg='filename',type='string', 
+		 help='filename to be read',
+		 default='other-gt-flow/Grove2/flow10.flo'},
+		{arg='tmpfilename',type='string', 
+		 help='tmp filename to be written and removed',
+		 default='/tmp/test.flo'}
+	     )
+	     print('Reading: '..filename)
+	     local d10 = readflo(filename,true)
+	     print('Writing: '..tmpfilename)
+	     writeflo(d10,tmpfilename)
+	     local d10c = readflo(tmpfilename)
+	     local diff = (d10-d10c):abs():sum()
+	     image.displayList{
+		images={
+		   opticalFlow.xy2rgb(d10:select(3,1),d10:select(3,2)),
+		   opticalFlow.xy2rgb(d10c:select(3,1),d10c:select(3,2))
+		},
+		legends={'original','copy'},
+		legend=filename..' diff: '..diff,
+		gui=false,
+		nhtiles=2
+	     }
+	     print('Diff: '..diff)
+	     print('Removing: '..tmpfilename)
+	     os.execute('rm '..tmpfilename)
+	     return 1
+	  end
+
 end
 
 return opticalFlow

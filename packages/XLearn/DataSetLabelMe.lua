@@ -45,14 +45,17 @@ do
          {arg='classNames', type='table', help='list of class names', default={'no name'}},
          {arg='nbRawSamples', type='number', help='number of images'},
          {arg='rawSampleMaxSize', type='number', help='resize all images to fit in a MxM window'},
+         {arg='rawSampleSize', type='table', help='resize all images precisely'},
          {arg='nbPatchPerSample', type='number', help='number of patches to extract from each image', default=100},
          {arg='patchSize', type='number', help='size of patches to extract from images', default=64},
          {arg='samplingMode', type='string', help='patch sampling method: random | uniform', default='random'},
-         {arg='labelType', type='string', help='type of label returned: center | pixelwise', default='center'},
+         {arg='labelType', type='string', help='type of label returned: center | pixelwise | fovea', default='center'},
+         {arg='fovea', type='nn.SpatialFovea', help='if passed, it will be focused automatically'},
          {arg='infiniteSet', type='boolean', help='if true, the set can be indexed to infinity, looping around samples', default=false},
          {arg='classToSkip', type='number', help='index of class to skip during sampling', default=0},
          {arg='preloadSamples', type='boolean', help='if true, all samples are preloaded in memory', default=false},
          {arg='cacheFile', type='string', help='path to cache file (once cached, loading is much faster)'},
+         {arg='processor', type='nn.fovea', help='module that postprocess the data for training'},
          {arg='verbose', type='boolean', help='dumps information', default=false}
       )
 
@@ -103,6 +106,9 @@ do
       self.nbSamples = self.nbPatchPerSample * self.nbRawSamples
 
       -- max size ?
+      if not self.rawSampleMaxSize then
+         self.rawSampleMaxSize = math.max(self.rawSampleSize[1],self.rawSampleSize[2])
+      end
       local maxXY = math.max(self.maxX, self.maxY)
       if maxXY < self.rawSampleMaxSize then
          self.rawSampleMaxSize = maxXY
@@ -133,11 +139,6 @@ do
                   idx = idx + v.size
                end
             end
-            -- class pointers
-            self.currentClassCursor =  {}
-            for i = 1,#self.tags do
-               self.currentClassCursor[i] = 1
-            end
          end
       else
          error('ERROR <DataSetLabelMe> unknown sampling mode')
@@ -154,7 +155,7 @@ do
    end
 
    function DataSetLabelMe:__tostring__()
-      str = '# DataSetLabelMe\n'
+      local str = 'DataSetLabelMe:\n'
       str = str .. '  + path : '..self.path..'\n'
       if self.cacheFile then
          str = str .. '  + cache files : [path]/'..self.cacheFile..'-[tags|samples]\n'
@@ -168,6 +169,9 @@ do
          str = str .. '  + samples are resized to fit in a '
          str = str .. self.rawSampleMaxSize .. 'x' .. self.rawSampleMaxSize .. ' tensor'
          str = str .. ' [max raw size = ' .. self.maxX .. 'x' .. self.maxY .. ']\n'
+         if self.rawSampleSize then
+            str = str .. '  + imposed ratio of ' .. self.rawSampleSize[1] .. 'x' .. self.rawSampleSize[2] .. '\n'
+         end
       end
       str = str .. '  + patches size : ' .. self.patchSize .. 'x' .. self.patchSize .. '\n'
       if self.classToSkip ~= 0 then
@@ -185,7 +189,7 @@ do
 
    function DataSetLabelMe:__index__(key)
       if type(key)=='string' and key == 'last' then
-         key = self.currentKey
+         xerror('deprecated','DataSetLabelMe')
       end
       if type(key)=='number' then
          local which_tag
@@ -194,11 +198,6 @@ do
             -- get indexes from random table
             which_tag = self.randomLookup[math.random(1,self.nbRandomPatches)]
             tag_idx = math.floor(math.random(0,self.tags[which_tag].size-1)/3)*3+1
-            --self.currentClassCursor[which_tag] = self.currentClassCursor[which_tag] + 3
-            -- make sure the cursor doesn't go over the nb of samples of the current class
-            if self.currentClassCursor[which_tag] > self.tags[which_tag].size then
-               self.currentClassCursor[which_tag] = 1
-            end
          elseif self.samplingMode == 'equal' then
             -- equally sample each category:
             which_tag = ((key-1) % (self.nbClasses)) + 1
@@ -212,14 +211,20 @@ do
          end
 
          -- generate patch
+         local subx,suby
          self:loadSample(self.tags[which_tag].data[tag_idx+2])
          local ctr_x = self.tags[which_tag].data[tag_idx]
          local ctr_y = self.tags[which_tag].data[tag_idx+1] 
-         local subx = math.floor(ctr_x - self.patchSize/2) + 1
-         self.currentX = subx/self.currentSample:size(1)
-         local suby = math.floor(ctr_y - self.patchSize/2) + 1
-         self.currentY = suby/self.currentSample:size(1)
-         local subtensor = self.currentSample:narrow(1,subx,self.patchSize):narrow(2,suby,self.patchSize)
+         local subtensor
+         if self.processor then
+            subtensor = self.processor:forward(self.currentSample,ctr_x,ctr_y)
+         else
+            subx = math.floor(ctr_x - self.patchSize/2) + 1
+            self.currentX = subx/self.currentSample:size(1)
+            suby = math.floor(ctr_y - self.patchSize/2) + 1
+            self.currentY = suby/self.currentSample:size(1)
+            subtensor = self.currentSample:narrow(1,subx,self.patchSize):narrow(2,suby,self.patchSize)
+         end
 
          if self.labelType == 'center' then
             -- generate label vector for patch centre
@@ -237,13 +242,147 @@ do
             local annotation = self.currentMask:narrow(1,subx,self.patchSize):narrow(2,suby,self.patchSize)
             return {subtensor, annotation}, true
 
+         elseif self.labelType == 'fovea' then
+            -- focus given fovea on the current patch
+            if self.fovea then
+               self.fovea:focus(ctr_x,ctr_y,self.patchSize)
+            end
+
+            -- generate label vector for patch centre
+            local vector = torch.Tensor(1,1,self.nbClasses):fill(-1)
+            vector[1][1][which_tag] = 1
+
+            -- and optional string
+            local label = self.classNames[which_tag]
+
+            -- return whole input + label
+            return {self.currentSample, vector, label}, true
+
+         elseif self.labelType == 'pixelwise+fovea' then
+            -- focus given fovea on the current patch
+            if self.fovea then
+               self.fovea:focus(ctr_x,ctr_y,self.patchSize)
+            end
+
+            -- return raw sample and annotation
+            return {self.currentSample, self.currentMask, x=ctr_x, y=ctr_y}, true
+
          else
             -- no label
             return {subtensor}, true
          end
 
-         -- set key
-         self.currentKey = key
+      elseif type(key)=='string' and (key == 'similar' or key == 'dissimilar') then
+         local which_tag, which_tag2
+         local tag_idx, tag_idx2
+         self.currentKey = self.currentKey or 1
+         if key == 'similar' then --for DrLim training
+            if self.samplingMode == 'random' then
+               -- get indexes from random table
+               which_tag = self.randomLookup[math.random(1,self.nbRandomPatches)]
+               which_tag2 = which_tag
+               tag_idx = math.floor(math.random(0,self.tags[which_tag].size-1)/3)*3+1
+               repeat
+                  tag_idx2 = math.floor(math.random(0,self.tags[which_tag2].size-1)/3)*3+1
+               until tag_idx2 ~= tag_idx
+            elseif self.samplingMode == 'equal' then
+               key = self.currentKey
+               self.currentKey = self.currentKey + 1
+               -- equally sample each category:
+               which_tag = ((key-1) % (self.nbClasses)) + 1
+               while self.tags[which_tag].size == 0 or which_tag == self.classToSkip do
+                  -- no sample in that class, replacing with random patch
+                  which_tag = math.floor(random.uniform(1,self.nbClasses))
+               end
+               which_tag2 = which_tag
+                  
+               local nbSamplesPerClass = math.ceil(self.nbSamples / self.nbClasses)
+               tag_idx = math.floor((key*nbSamplesPerClass-1)/self.nbClasses) + 1
+               tag_idx = ((tag_idx-1) % (self.tags[which_tag].size/3))*3 + 1
+               tag_idx2 = math.floor(math.random(0,self.tags[which_tag2].size-1)/3)*3+1
+            end
+         elseif key == 'dissimilar' then --for DrLim training
+            if self.samplingMode == 'random' then
+               -- get indexes from random table
+               which_tag = self.randomLookup[math.random(1,self.nbRandomPatches)]
+               repeat
+                  which_tag2 = self.randomLookup[math.random(1,self.nbRandomPatches)]
+               until which_tag2 ~= which_tag
+               tag_idx = math.floor(math.random(0,self.tags[which_tag].size-1)/3)*3+1
+               tag_idx2 = math.floor(math.random(0,self.tags[which_tag2].size-1)/3)*3+1
+            elseif self.samplingMode == 'equal' then
+               key = self.currentKey
+               self.currentKey = self.currentKey + 1
+               -- equally sample each category:
+               which_tag = ((key-1) % (self.nbClasses)) + 1
+               while self.tags[which_tag].size == 0 or which_tag == self.classToSkip do
+                  -- no sample in that class, replacing with random patch
+                  which_tag = math.floor(random.uniform(1,self.nbClasses))
+               end
+               repeat
+                  which_tag2 = math.floor(random.uniform(1,self.nbClasses))
+               until which_tag2 ~= which_tag 
+                  and self.tags[which_tag2].size ~= 0 
+                  and which_tag2 ~= self.classToSkip
+               
+               local nbSamplesPerClass = math.ceil(self.nbSamples / self.nbClasses)
+               tag_idx = math.floor((key*nbSamplesPerClass-1)/self.nbClasses) + 1
+               tag_idx = ((tag_idx-1) % (self.tags[which_tag].size/3))*3 + 1
+               tag_idx2 = math.floor(math.random(0,self.tags[which_tag2].size-1)/3)*3+1
+            end
+         end
+
+         -- now generate pair of patches and return
+         self:loadSample(self.tags[which_tag].data[tag_idx+2])
+         local ctr_x = self.tags[which_tag].data[tag_idx]
+         local ctr_y = self.tags[which_tag].data[tag_idx+1] 
+         local subx = math.floor(ctr_x - self.patchSize/2) + 1
+         self.currentX = subx/self.currentSample:size(1)
+         local suby = math.floor(ctr_y - self.patchSize/2) + 1
+         self.currentY = suby/self.currentSample:size(1)
+         local subtensor = self.currentSample:narrow(1,subx,self.patchSize):narrow(2,suby,self.patchSize)
+         -- make a copy otherwise it will be overwritten
+         subtensor = torch.Tensor():resizeAs(subtensor):copy(subtensor)
+         -- generate label vector for patch centre
+         local vector = torch.Tensor(1,1,self.nbClasses):fill(-1)
+
+         -- generate pixelwise annotation
+         local annotation = self.currentMask:narrow(1,subx,self.patchSize):narrow(2,suby,self.patchSize)
+            
+         -- patch2
+         self:loadSample(self.tags[which_tag2].data[tag_idx2+2])
+         local ctr_x2 = self.tags[which_tag2].data[tag_idx2]
+         local ctr_y2 = self.tags[which_tag2].data[tag_idx2+1] 
+         local subx2 = math.floor(ctr_x2 - self.patchSize/2) + 1
+         self.currentX = subx2/self.currentSample:size(1)
+         local suby2 = math.floor(ctr_y2 - self.patchSize/2) + 1
+         self.currentY = suby2/self.currentSample:size(1)
+         local subtensor2 = self.currentSample:narrow(1,subx2,self.patchSize):narrow(2,suby2,self.patchSize)
+         -- make a copy otherwise it will be overwritten
+         subtensor2 = torch.Tensor():resizeAs(subtensor2):copy(subtensor2)
+         -- generate label vector for patch centre
+         local vector2 = torch.Tensor(1,1,self.nbClasses):fill(-1)
+
+         -- generate pixelwise annotation
+         local annotation2 = self.currentMask:narrow(1,subx2,self.patchSize):narrow(2,suby2,self.patchSize)
+            
+         if self.labelType == 'center' then
+            vector[1][1][which_tag] = 1
+            vector2[1][1][which_tag2] = 1
+            -- and optional string
+            local label = self.classNames[which_tag]
+            local label2 = self.classNames[which_tag2]
+
+            -- return sample+label
+            return {{subtensor, vector, label},{subtensor2, vector2, label2}}, true
+
+         elseif self.labelType == 'pixelwise' then
+            return {{subtensor, annotation},{subtensor2, annotation2}}, true
+         else
+            -- no label
+            return {subtensor,subtensor2}, true
+         end
+
       end
       return rawget(self,key)
    end
@@ -271,8 +410,19 @@ do
          -- load image
          local img_loaded = image.load(self.rawdata[index].imgfile)
          local mask_loaded = image.load(self.rawdata[index].maskfile):select(3,1)
-         if self.rawSampleMaxSize and (self.rawSampleMaxSize < img_loaded:size(1)
+         -- resize ?
+         if self.rawSampleSize then
+            -- resize precisely
+            local w = self.rawSampleSize[1]
+            local h = self.rawSampleSize[2]
+            self.currentSample = torch.Tensor(w,h,img_loaded:size(3))
+            image.scale(img_loaded, self.currentSample, 'bilinear')
+            self.currentMask = torch.Tensor(w,h)
+            image.scale(mask_loaded, self.currentMask, 'simple')
+
+         elseif self.rawSampleMaxSize and (self.rawSampleMaxSize < img_loaded:size(1)
                                     or self.rawSampleMaxSize < img_loaded:size(2)) then
+            -- resize to fit in bounding box
             local w,h
             if img_loaded:size(1) >= img_loaded:size(2) then
                w = self.rawSampleMaxSize
@@ -338,6 +488,37 @@ do
       end
    end
 
+   local extract = inline.load [[
+         const void* torch_Tensor_id = luaT_checktypename2id(L, "torch.Tensor");
+         const void* torch_ShortStorage_id = luaT_checktypename2id(L, "torch.ShortStorage");
+         int tags = 1;
+         THTensor *mask = luaT_checkudata(L, 2, torch_Tensor_id);
+         int x_start = lua_tonumber(L, 3);
+         int x_end = lua_tonumber(L, 4);
+         int y_start = lua_tonumber(L, 5);
+         int y_end = lua_tonumber(L, 6);
+         int idx = lua_tonumber(L, 7);
+
+         int x,y,label,tag,size;
+         THShortStorage *data;
+         for (x=x_start; x<=x_end; x++) {
+            for (y=y_start; y<=y_end; y++) {
+               label = THTensor_get2d(mask, x-1, y-1);                                   // label = mask[x][y]
+               lua_rawgeti(L, tags, label);                                              // tag = tags[label]
+               tag = lua_gettop(L);
+               lua_pushstring(L, "size"); lua_rawget(L, tag);                            // size = tag.size
+               size = lua_tonumber(L,-1); lua_pop(L,1);
+               lua_pushstring(L, "size"); lua_pushnumber(L, size+3); lua_rawset(L, tag); // tag.size = size + 3
+               lua_pushstring(L, "data"); lua_rawget(L, tag);                            // data = tag.data
+               data = luaT_checkudata(L, -1, torch_ShortStorage_id); lua_pop(L, 1);
+               data->data[size] = x;                                                     // data[size+1] = x
+               data->data[size+1] = y;                                                   // data[size+1] = y
+               data->data[size+2] = idx;                                                 // data[size+1] = idx
+               lua_pop(L, 1);
+            }
+         }
+   ]]
+
    function DataSetLabelMe:parseMask(existing_tags)
       local tags
       if not existing_tags then
@@ -362,15 +543,17 @@ do
       local x_end = mask:size(1) - math.ceil(self.patchSize/2)
       local y_start = math.ceil(self.patchSize/2)
       local y_end = mask:size(2) - math.ceil(self.patchSize/2)
-      for x = x_start,x_end do
-         for y = y_start,y_end do
-            local size = tags[mask[x][y]].size
-            tags[mask[x][y]].data[size+1] = x
-            tags[mask[x][y]].data[size+2] = y
-            tags[mask[x][y]].data[size+3] = self.currentIndex
-            tags[mask[x][y]].size = size+3
-         end
-      end
+      -- The following code has been replaced by inline C, for efficiency
+      -- for x = x_start,x_end do
+      --    for y = y_start,y_end do
+      --       local size = tags[mask[x][y]].size
+      --       tags[mask[x][y]].data[size+1] = x
+      --       tags[mask[x][y]].data[size+2] = y
+      --       tags[mask[x][y]].data[size+3] = self.currentIndex
+      --       tags[mask[x][y]].size = size+3
+      --    end
+      -- end
+      extract(tags, mask, x_start, x_end, y_start, y_end, self.currentIndex)
       return tags
    end
 
@@ -543,5 +726,9 @@ do
                         offset_y=step_y}
          step_x = step_x +  sizeX*scale
       end
+   end
+
+   function DataSetLabelMe:__show()
+      self:display{}
    end
 end

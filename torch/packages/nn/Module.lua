@@ -19,6 +19,16 @@ end
 function Module:updateParameters(learningRate)
 end
 
+function Module:decayParameters(decay)
+end
+
+function Module:empty()
+   self.gradInput:resize()
+   self.gradInput:storage():resize(0)
+   self.output:resize()
+   self.output:storage():resize(0)
+end
+
 function Module:write(file)
    file:writeObject(self.gradInput)
    file:writeObject(self.output)
@@ -27,6 +37,30 @@ end
 function Module:read(file)
    self.gradInput = file:readObject()
    self.output = file:readObject()
+end
+
+function Module:writef(file,mode)
+   local file = torch.DiskFile(file, 'w')
+   if mode=='b' then file:binary() end
+   self:write(file)
+   file:close()
+   return self
+end
+
+function Module:readf(file,mode)
+   local file = torch.DiskFile(file, 'r')
+   if mode=='b' then file:binary() end
+   self:read(file)
+   file:close()
+   return self
+end
+
+function Module:writeb(file)
+   return self:writef(file,'b')
+end
+
+function Module:readb(file)
+   return self:readf(file,'b')
 end
 
 function Module:share(mlp, ...)

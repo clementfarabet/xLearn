@@ -217,8 +217,23 @@ QLuaConsoleWidget::addOutput(QString text, QTextCharFormat format)
   QScrollBar *s = verticalScrollBar();
   bool tracking = (s && s->value() >= s->maximum() - 2);
   c.setPosition(b.position());
-  c.movePosition(QTextCursor::EndOfBlock);
-  c.insertText(text, format);
+  // Farabet: added handler for \r (line erase)
+  if (text.contains('\r')) {
+    QStringList list;
+    list = text.split('\r');
+    for (int i = 0; i < list.size(); ++i) {
+      c.insertText(list.at(i), format);
+      if (i < list.size()-1) {
+        c.select(QTextCursor::LineUnderCursor);
+        c.removeSelectedText();
+        c.movePosition(QTextCursor::StartOfBlock);
+      }
+    }
+    // end Farabet.
+  } else {
+    c.movePosition(QTextCursor::EndOfBlock);
+    c.insertText(text, format);
+  }
   if (tracking)
     s->setValue(s->maximum());
 }

@@ -1,6 +1,8 @@
 .PHONY: build install help camiface luajit clean
 
 INSTALL_PREFIX=/usr/local
+USE_YAML=1
+USE_OPENCL=1
 USE_OPENCV=1
 USE_V4L2=1
 USE_CAMIFACE=1
@@ -12,7 +14,10 @@ USE_MPEG2=1
 USE_KINECT=1
 USE_PINK=1
 USE_VLFEAT=1
+USE_MATLAB=1
+USE_BUNDLER=0
 USE_MINCUT=1
+USE_LUNIT=1
 USE_LUAJIT=0
 USE_THREAD=1
 USE_BIT=1
@@ -21,7 +26,7 @@ EXPORT=xLearn-beta
 
 UNAME := $(shell uname)
 
-all: help build
+all: build
 
 help:
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -38,7 +43,11 @@ help:
 	@-echo ""
 	@-echo "  DOC=0|1           [current=${DOC}]   ? makes Documentation"
 	@-echo ""
-	@-echo "  USE_OPENCV=1|0    [current="${USE_OPENCV}"]   ? OpenCV 2.x Lua wrapper (Linux webcam), requires OpenCV 2.x"
+	@-echo "  USE_YAML=1|0      [current="${USE_YAML}"]   ? yaml parser"
+	@-echo "  USE_LUNIT=1|0     [current="${USE_LUNIT}"]   ? lunit for unit test"
+	@-echo "  USE_MATLAB=1|0    [current="${USE_MATLAB}"]   ? Matlab wrapper"
+	@-echo "  USE_OPENCL=1|0    [current="${USE_OPENCL}"]   ? OpenCL 1.x Lua wrapper, requires OpenCL 1.x"
+	@-echo "  USE_OPENCV=1|0    [current="${USE_OPENCV}"]   ? OpenCV 2.x Lua wrapper, requires OpenCV 2.x"
 	@-echo "  USE_V4L2=1|0      [current="${USE_V4L2}"]   ? video4linux2 Lua wrapper (Linux webcam), requires V4L2"
 	@-echo "  USE_CAMIFACE=1|0  [current="${USE_CAMIFACE}"]   ? LibCamiface + Lua wrapper (MacOS webcam)"
 	@-echo "  USE_NEUFLOW=1|0   [current="${USE_NEUFLOW}"]   ? Compiler + DevTools for the NeuFlow arch"
@@ -47,6 +56,7 @@ help:
 	@-echo "  USE_JPEG=1|0      [current="${USE_JPEG}"]   ? LibJpeg wrapper"
 	@-echo "  USE_KINECT=1|0    [current="${USE_KINECT}"]   ? Libfreenect wrapper"
 	@-echo "  USE_VLFEAT=1|0    [current="${USE_VLFEAT}"]   ? VLFeat + Lua wrapper (SIFT, MSER, k-means, hierarchical k-means, ...)"
+	@-echo "  USE_BUNDLER=1|0   [current="${USE_BUNDLER}"]   ? Bundler + Lua wrapper (Structure from Motion code)"
 	@-echo "  USE_PINK=1|0      [current="${USE_PINK}"]   ? Pink + Lua wrapper (morpho math library)"
 	@-echo "  USE_MPEG2=1|0     [current="${USE_MPEG2}"]   ? LibMpeg2 wrapper"
 	@-echo "  USE_BITOP=1|0     [current="${USE_BIT}"]   ? LuaBitOP library (bitwise operators for Lua)"
@@ -77,9 +87,9 @@ help:
 	@-echo "    $ sudo make USE_LUAJIT=1 install"
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
-build: camiface luajit
+build: getnets camiface luajit
 	@-mkdir -p torch/scratch
-	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=${DOC} -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_vlfeat=${USE_VLFEAT} -DWITH_CONTRIB_pink=${USE_PINK} -DWITH_CONTRIB_Kinect=${USE_KINECT} -DWITH_CONTRIB_mincut=${USE_MINCUT} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
+	cd torch/scratch && PATH=${INSTALL_PREFIX}/bin:${PATH}  && cmake .. -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DWITH_CONTRIB_XLearn=1 -DHTML_DOC=${DOC} -DWITH_CONTRIB_ffmpeg=1 -DWITH_CONTRIB_inline=1 -DWITH_CONTRIB_toolBox=1 -DWITH_CONTRIB_imageBox=1 -DWITH_CONTRIB_debugger=1 -DUSE_LUAJIT=${USE_LUAJIT} -DWITH_CONTRIB_matlab=${USE_MATLAB} -DWITH_CONTRIB_lunit=${USE_LUNIT} -DWITH_CONTRIB_thread=${USE_THREAD} -DWITH_CONTRIB_opticalFlow=${USE_3RDPARTY} -DWITH_CONTRIB_mstsegm=${USE_3RDPARTY} -DWITH_CONTRIB_stereo=${USE_3RDPARTY} -DWITH_CONTRIB_powerwatersegm=${USE_3RDPARTY} -DWITH_CONTRIB_bit=${USE_BIT} -DWITH_CONTRIB_camiface=${USE_CAMIFACE} -DWITH_CONTRIB_luaFlow=${USE_XFLOW} -DWITH_CONTRIB_xFlow=${USE_XFLOW} -DWITH_CONTRIB_NeuFlow=${USE_NEUFLOW} -DWITH_CONTRIB_yaml=${USE_YAML} -DWITH_CONTRIB_opencl=${USE_OPENCL} -DWITH_CONTRIB_opencv=${USE_OPENCV} -DWITH_CONTRIB_video4linux=${USE_V4L2} -DWITH_CONTRIB_etherflow=${USE_NEUFLOW} -DWITH_CONTRIB_jpeg=${USE_JPEG} -DWITH_CONTRIB_vlfeat=${USE_VLFEAT} -DWITH_CONTRIB_bundler=${USE_BUNDLER} -DWITH_CONTRIB_pink=${USE_PINK} -DWITH_CONTRIB_kinect=${USE_KINECT} -DWITH_CONTRIB_mincut=${USE_MINCUT} -DWITH_CONTRIB_mpeg2=${USE_MPEG2} && make
 	@-echo ""
 	@-echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 	@-echo "Build succesful, install with admin rights (in /usr/local):"
@@ -106,7 +116,7 @@ endif
 luajit:
 ifeq (${USE_LUAJIT},1)
 	@-echo "+++ installing LuaJIT +++"
-	cd luajit-torch && make && make install PREFIX=${INSTALL_PREFIX}
+	cd luajit-torch && make PREFIX=${INSTALL_PREFIX} && make install PREFIX=${INSTALL_PREFIX}
 endif
 
 ixflow:
@@ -116,22 +126,25 @@ ifeq (${USE_XFLOW},1)
 endif
 
 extrabins:
-	@-echo "qlua -ide -i" ${INSTALL_PREFIX}"/share/lua/5.1/XLearn/luaX.lua" > ${INSTALL_PREFIX}"/bin/luaX"
+	@-echo "qlua -ide=tab -i" ${INSTALL_PREFIX}"/share/lua/5.1/XLearn/luaX.lua" > ${INSTALL_PREFIX}"/bin/luaX"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/luaX"
-	@-echo "qlua -lXLearn $1" > ${INSTALL_PREFIX}"/bin/xlua"
+	@-echo "qlua -i" ${INSTALL_PREFIX}"/share/lua/5.1/XLearn/luaX.lua" > ${INSTALL_PREFIX}"/bin/xlua"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/xlua"
 	@-cp "packages/debugger/luaD" ${INSTALL_PREFIX}"/bin/luaD"
 	@-chmod +x ${INSTALL_PREFIX}"/bin/luaD"
 
-install: installLua installLuaDoc report
+install: installLua installExtras report
 	@-echo ${INSTALL_PREFIX} > torch/scratch/PREFIX
 
 installLuarock:
 	@-echo "+++ installing luarock +++"
-	cd luarocks && ./configure && make && make install PREFIX=${INSTALL_PREFIX}
+	@-cd luarocks && ./configure --prefix=${INSTALL_PREFIX} && make PREFIX=${INSTALL_PREFIX} && make install PREFIX=${INSTALL_PREFIX}
+	@-chmod +x ${INSTALL_PREFIX}/bin/luarocks
+	@-chmod +x ${INSTALL_PREFIX}/bin/luarocks-admin
 
-installLuaDoc: installLuarock
+installExtras: installLuarock
 	luarocks install luadoc
+	luarocks install cosmo
 
 doc: force
 	@-echo "+++ generating documentation +++"
@@ -176,6 +189,21 @@ devlinks:
 	@-rm -rf ${INSTALL_PREFIX}/share/lua/5.1/luaFlow
 	ln -sf `pwd`/torch/contrib/luaFlow ${INSTALL_PREFIX}/share/lua/5.1/luaFlow
 	@-echo "+++ creating soft links for easier devel +++"
+
+getnets:
+	@-echo "+++ retrieving trained networks +++"
+	@-if [ -d trained-nets ]; then \
+		echo "already there [delete trained-nets/ to force resync]"; \
+	else \
+		if [ `which wget` ]; then \
+			wget data.neuflow.org/share/trained-nets.tgz; \
+		else \
+			curl data.neuflow.org/share/trained-nets.tgz > trained-nets.tgz; \
+		fi; \
+		tar xzvf trained-nets.tgz; \
+		rm -f trained-nets.tgz; \
+	fi;
+	@-echo "+++ done retrieving networks +++"
 
 export:
 	@-echo "+++ exporting project to" ${EXPORT}.tgz "+++"
@@ -239,6 +267,7 @@ uninstall:
 	@-if test -f torch/scratch/PREFIX; then\
 		echo --- uninstalling ---; \
 		rm -rf `cat torch/scratch/PREFIX`/share/lua;\
+		rm -rf `cat torch/scratch/PREFIX`/share/torch;\
 		rm -rf `cat torch/scratch/PREFIX`/share/luajit*;\
 		rm -rf `cat torch/scratch/PREFIX`/lib/lua;\
 		rm -rf `cat torch/scratch/PREFIX`/lib/luarocks;\

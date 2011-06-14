@@ -33,8 +33,8 @@ function SpatialLinearHessian:oneLearningRates()
 end
 
 function SpatialLinearHessian:boundLearningRates(mu)
-   self.weightLearningRate:add(mu)
-   self.biasLearningRate:add(mu)
+   self.weightLearningRate:abs():add(mu)
+   self.biasLearningRate:abs():add(mu)
 end
 
 function SpatialLinearHessian:updateLearningRates(factor)
@@ -65,7 +65,6 @@ function SpatialLinearHessian:backwardHessian(input, hessianOutput)
          self.hessianInput[x][y]:addT2dotT1(1, self.squaredWeight, hessianOutput[x][y])
       end
    end
-
    return self.gradInput, self.hessianInput
 end
 

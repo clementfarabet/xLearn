@@ -20,12 +20,13 @@ function Sequential:get(index)
    return self.modules[index]
 end
 
-function Sequential:forward(input)
+function Sequential:forward(input,...)
    local currentOutput = input
    for i=1,#self.modules do 
-      currentOutput = self.modules[i]:forward(currentOutput)
+      currentOutput, error = self.modules[i]:forward(currentOutput,...)
    end 
-   return currentOutput
+   self.output = currentOutput
+   return currentOutput, error
 end
 
 function Sequential:backward(input, gradOutput)
@@ -37,7 +38,8 @@ function Sequential:backward(input, gradOutput)
       currentModule = previousModule
    end
    currentGradOutput = currentModule:backward(input, currentGradOutput)
-  return currentGradOutput
+   self.gradInput = currentGradOutput
+   return currentGradOutput
 end
 
 function Sequential:zeroGradParameters()
@@ -50,6 +52,18 @@ function Sequential:updateParameters(learningRate)
    for i=1,#self.modules do
       self.modules[i]:updateParameters(learningRate)
    end
+end
+
+function Sequential:decayParameters(decay)
+   for i=1,#self.modules do
+      self.modules[i]:decayParameters(decay)
+   end
+end
+
+function Sequential:empty()
+  for i=1,#self.modules do
+     self.modules[i]:empty()
+  end
 end
 
 function Sequential:write(file)

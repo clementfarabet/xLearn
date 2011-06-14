@@ -22,9 +22,10 @@ function Graph:__init(...)
    )
    self.edges = torch.Tensor()
    self.vertices = torch.Tensor()
+   self.mst = nil
    self.nbVertices = 0
    self.nbEdges = 0
-   self.connexity = 0
+   self.connex = 0
    if img then
       self:createFromImage(...)
    elseif edges then
@@ -122,4 +123,112 @@ function Graph:threshold(...)
    )
    image.threshold(self.edges, threshold, 0, 0, 1)
    return self.edges
+end
+
+------------------------------------------------------------
+-- Compute minimax on graph
+------------------------------------------------------------
+function Graph:minimax(...)
+   local args, v1, v2, mst, show = toolBox.unpack(
+      {...},
+      'mstsegm.mst_minimaxDisparity',
+      'Computes the minimax disparity between two vertices in the graph'
+         .. 'if no vertex is provided, then the full matrix is computed',
+      {arg='vertex1', type='number', help='a vertex in the graph'},
+      {arg='vertex2', type='number', help='a second vertex in the graph'},
+      {arg='mst', type='boolean', help='if true, recompute mst', default=true},
+      {arg='show', type='boolean', help='show (display) minimax point', default=false}
+   )
+   if not self.mst or mst then
+      self.mst = libmstsegm.mst(self.edges,0,0,self.connex)
+   end
+   if v1 and v2 and type(v1) == 'table' then
+      v1 = (v1[2]-1)*self.edges:size(1) + v1[1]
+      v2 = (v2[2]-1)*self.edges:size(1) + v2[1]
+   end
+   local w,e1,e2 = libmstsegm.mst_minimaxdisparity(self.mst,v1,v2)
+   if show and v1 and self.connex == 4 then -- display only supported for connex 4
+      -- render graph edges
+      local surface = gfx.ImageSurface(self.edges:size(1)*2, self.edges:size(2))
+      image.displayList{images=self.edges, window=surface, legends={'Horz Edges','Vert Edges'}}
+      surface:batchBegin()
+      -- horizontal edge:
+      if math.max(e1,e2) == math.min(e1,e2)+1 then
+         local off = math.min(e1,e2)-1
+         local offy = math.floor(off/self.edges:size(1))
+         local offx = off-offy*self.edges:size(1)
+         offx = offx+1
+         offy = offy+1
+         -- minimax:
+         local circ1 = surface:circle(offx,offy)
+         circ1:set('penColor',{1,0,0})
+         circ1:set('markerSize',1)
+         -- vertices:
+         v1 = v1-1
+         offy = math.floor(v1/self.edges:size(1))
+         offx = v1-offy*self.edges:size(1)
+         offx = offx+1
+         offy = offy+1
+         local circ2 = surface:circle(offx,offy)
+         circ2:set('penColor',{0,1,0})
+         circ2:set('markerSize',2)
+         v2 = v2-1
+         offy = math.floor(v2/self.edges:size(1))
+         offx = v2-offy*self.edges:size(1)
+         offx = offx+1
+         offy = offy+1
+         local circ3 = surface:circle(offx,offy)
+         circ3:set('penColor',{0,1,0})
+         circ3:set('markerSize',2)
+      -- vertical edge:
+      else
+         local off = math.min(e1,e2)-1
+         local offy = math.floor(off/self.edges:size(1))
+         local offx = off-offy*self.edges:size(1)
+         offx = offx+1
+         offy = offy+1
+         -- minimax:
+         local circ1 = surface:circle(offx+self.edges:size(1),offy)
+         circ1:set('penColor',{1,0,0})
+         circ1:set('markerSize',1)
+         -- vertices:
+         v1 = v1-1
+         offy = math.floor(v1/self.edges:size(1))
+         offx = v1-offy*self.edges:size(1)
+         offx = offx+1
+         offy = offy+1
+         local circ2 = surface:circle(offx+self.edges:size(1),offy)
+         circ2:set('penColor',{0,1,0})
+         circ2:set('markerSize',2)
+         v2 = v2-1
+         offy = math.floor(v2/self.edges:size(1))
+         offx = v2-offy*self.edges:size(1)
+         offx = offx+1
+         offy = offy+1
+         local circ3 = surface:circle(offx+self.edges:size(1),offy)
+         circ3:set('penColor',{0,1,0})
+         circ3:set('markerSize',2)
+      end
+      surface:batchEnd()
+      surface:redraw()
+      image.display{image=surface.lcairo_object:toTensor(), legend='Minimax Path'}
+   end
+   return w,e1,e2
+end
+
+------------------------------------------------------------
+-- Display method
+------------------------------------------------------------
+function Graph:__show()
+   local zoom = 1
+   if self.edges:size(1) > 400 then
+      zoom = 400 / self.edges:size(1)
+   end
+   image.displayList{images=self.edges, 
+                     zoom=zoom,
+                     win_w=self.edges:size(1)*2*zoom,
+                     win_h=self.edges:size(2)*zoom,
+                     font=12,
+                     legend='mstsegm.Graph [connex = ' .. self.connex .. ']',
+                     legends={'horizontal','vertical','diag left','diag right'}}
 end

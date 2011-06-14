@@ -41,6 +41,8 @@ Lua 5.1.3  Copyright (C) 1994-2008 Lua.org, PUC-Rio
 You might have to specify the exact path of the =lua= executable, if you have several Lua installed
 on your system, or if you installed Torch in a non-standard path.
 
+There are several types of shell you can use. In particular, if you built against QT4, you should have access to qlua (lua + QT bindings), and luaX (lua + QT bindings + Matlab-like user interface). luaX is recommended for beginners, as it helps quickly navigating/experimenting, with nice completion, history, ...
+
 The first command =require "torch"= imports the basic classes of Torch into 
 Lua, and after that they can be used.
 Instead of writing this on the command line in Lua you can also ask Lua on bootup to require this package from the shell:
@@ -53,7 +55,7 @@ Lua 5.1.3  Copyright (C) 1994-2008 Lua.org, PUC-Rio
 
 </verbatim>
 If you use Lua and Torch together all the time you might want to alias Lua
-to do that directly. 
+to do that directly. luaX automatically loads most our main packages (torch, XLearn, nn, ...).
 Whichever way you chose, in future examples I will assume that you have started Lua and required Torch.
  
 In this example, we checked Torch was working by creating an empty [[torch/index.hlp#Tensor][Tensor]] and printing it on the screen.

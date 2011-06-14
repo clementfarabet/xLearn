@@ -40,7 +40,7 @@ function GaborLayer:reset(stdv)
    -- initialize filter bank
    local kernelBank = self.bank.weight
    local i=1
-   print('# GaborLayer: generating '
+   print('<GaborLayer.reset> generating '
          ..self.nbFilters..' '..self.bank.weight:size(1)..'x'..self.bank.weight:size(1)
          ..' filters ('..self.nbOrientations..' angles, '
          ..self.nbFrequencies..' freqs)')
@@ -92,6 +92,6 @@ function GaborLayer:write(file)
 end
 
 function GaborLayer:read(file)
-   parent.write(self, file)
+   parent.read(self, file)
    self.bank = file:readObject()
 end

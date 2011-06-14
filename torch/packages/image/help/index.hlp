@@ -3,30 +3,6 @@ Image Package Reference Manual
 An image processing package operating on 
 =Torch= [[../torch/index.hlp#Tensor][=Tensor=]] objects.
 
----+ =image.load(filename,type,depth)=
-=image.load(string filename,string type,number depth)=
-loads an image file of type =type=, and converts to an
-=m= x =n= x =p= Tensor, where =m= is the width of the image
-and =n= is the height, and =p= is the depth.
-
-If =depth= is not supplied or =depth= = 1 then the image is 
-converted to grey-scale.
-If =depth= = 3 the image is converted to RGB.
-If =depth= = 4 the image is converted to RGBA.
-
-=type= can be currently only be set to 'PNG'.
-
-=image.load(string filename)= loads a PNG with =depth= 4.
-
----+ =image.save(filename,src,type)=
-=image.save(string filename,Tensor src,string type)=
-saves a  [[../torch/index.hlp#Tensor][=Tensor=]] =src= out as an
-image of type =type= to the file =filename=.  
-
-=type= can be currently only be set to 'PNG'.
-
-=image.save(string filename)= saves a PNG.
-
 ---+ =image.scale(src,dst,type)=
 =image.scale(Tensor src,Tensor dst,string type)=
  scales the [[../torch/index.hlp#Tensor][=Tensor=]] =src=
@@ -61,7 +37,7 @@ of =dst=.
 
 =src= and =dst= cannot be the same.
 
----+ =image.convolve(...)=
+---+ =image.tconvolve(...)=
 
 =image.convolve(src,dst,kernel)=
 performs  a convolution on the [[../torch/index.hlp#Tensor][=Tensor=]] =src=

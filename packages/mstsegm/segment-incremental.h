@@ -583,12 +583,10 @@ image<rgb> *segment_incrementalben(image<float> **img,
         x2 = THTensor_get3d(matches, 0, 1, i);
         y2 = THTensor_get3d(matches, 1, 1, i);
 
-        if ((x1 != x2) || (y1 != y2)) {
-          edges[num].a = (0 * height + y2) * width + x2;
-          edges[num].b = (1 * height + y1) * width + x1;
-          edges[num].w = 0; //vdiff(smoothed, nfeats, x1, y1, z1, x2, y2, z2, dt);
-          num++;
-        }
+        edges[num].a = (0 * height + y2) * width + x2;
+        edges[num].b = (1 * height + y1) * width + x1;
+        edges[num].w = 0; //vdiff(smoothed, nfeats, x1, y1, z1, x2, y2, z2, dt);
+        num++;
       }
     }
 

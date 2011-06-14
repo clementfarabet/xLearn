@@ -2,7 +2,7 @@
 torch.printStyle = 'memory'
 
 -- max size (to avoid lenghty printouts)
-torch.printMax = 50
+torch.printMax = 30
 
 -- tostring() functions for Tensor and Storage
 local function Storage__printformat(self)

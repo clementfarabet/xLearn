@@ -61,6 +61,8 @@ extern "C" {
 #include <lhierarchie.h>
 #include <lga2khalimsky.h>
 
+#include <disjoint-set.h>
+
 // conversion functions
 static struct xvimage *tensor_to_xvimage_3d(THTensor *tensor) {
   // create output
@@ -465,88 +467,34 @@ static int edges2ids_l(lua_State *L) {
 
   // create result
   THTensor *ids_th = THTensor_newWithSize2d(width, height);
-  THTensor_fill(ids_th,-1);
 
-  // parents
-  int pid = 0;
-  int *parents = (int *)malloc(sizeof(int)*width*height);
-  parents[pid++] = 0;
+  // make a disjoint-set forest
+  universe *u = new universe(width*height);
 
-  // loop over pixels
-  long int y=0,x=0;
-  double icur,iup,ileft;
-
-  // 1st pixel
-  THTensor_set2d(ids_th, 0, 0, pid);
-  parents[pid] = pid;
-  pid++;
-  // next pixels
-  for (y=0; y<height; y++) {
-    for (x=0; x<width; x++) {
-      icur = THTensor_get2d(img_th, x, y);
-      if (x > 0) {
-        ileft = THTensor_get2d(img_th, x-1, y);
-        if (ileft != 0 && icur == 0) {// new ID
-          THTensor_set2d(ids_th, x, y, pid);
-          parents[pid] = pid;
-          pid++;
-        } else if (ileft == 0 && icur == 0) {// same ID
-          THTensor_set2d(ids_th, x, y, THTensor_get2d(ids_th, x-1, y));
-        } else {// on edge
-          THTensor_set2d(ids_th, x, y, 0);
-        }
-      }
-      if (y > 0) {
-        iup = THTensor_get2d(img_th, x, y-1);
-        if (THTensor_get2d(ids_th, x, y) == -1) { // no ID assigned yet
-          if (iup != 0 && icur == 0) {// new ID
-            THTensor_set2d(ids_th, x, y, pid);
-            parents[pid] = pid;
-            pid++;
-          } else if (iup == 0 && icur == 0) {// same ID
-            THTensor_set2d(ids_th, x, y, THTensor_get2d(ids_th, x, y-1));
-          } else {// on edge
-            THTensor_set2d(ids_th, x, y, 0);
-          }
-        } else if (iup == 0 && icur == 0) { // ID already assigned, and fusion required
-          int id = THTensor_get2d(ids_th, x, y);
-          int idp = THTensor_get2d(ids_th, x, y-1);
-          if (id != idp) {
-            int p = idp;
-            int d = 0;
-            do {
-              d++;
-              if (d>height) break;
-              p = parents[p];
-              if (p == id) break;
-            } while (p != parents[p]);
-            parents[p] = id;
-          }
-        }
-      }
+  // process in one pass
+  for (int y = 0; y < height-1; y++) {
+    for (int x = 0; x < width-1; x++) {
+      int a = u->find(y*width + x);
+      int b = u->find(y*width + x+1);
+      int c = u->find((y+1)*width + x);
+      if ((a != b) && (THTensor_get2d(img_th, x, y) == THTensor_get2d(img_th, x+1, y))) u->join(a,b);
+      if ((a != c) && (THTensor_get2d(img_th, x, y) == THTensor_get2d(img_th, x, y+1))) u->join(a,c);
     }
   }
 
-  // resolve conflicts
-  for (int i=0; i<pid-1; i++) {
-    int p = i;
-    int d = 0;
-    while (parents[p] != p) {
-      d++;
-      if (d>height) break;
-      p = parents[p];
-      if (p==i) break;
-    }
-    parents[i] = p;
-  }
-  for (y=0; y<height; y++) {
-    for (x=0; x<width; x++) {
-      THTensor_set2d(ids_th, x, y, parents[(int)THTensor_get2d(ids_th, x, y)]);
+  // generate output
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      int comp = u->find(y * width + x);
+      if (THTensor_get2d(img_th, x, y) > 0)
+        THTensor_set2d(ids_th, x, y, 0);
+      else
+        THTensor_set2d(ids_th, x, y, comp+1);
     }
   }
 
   // cleanup
-  free(parents);
+  delete u;
 
   // return result
   luaT_pushudata(L, ids_th, luaT_checktypename2id(L, "torch.Tensor"));

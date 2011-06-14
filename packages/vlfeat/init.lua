@@ -121,7 +121,7 @@ if not vlfeatLoaded then
            -- clear hist
            if win then win:cls() end
            -- disp image
-           win = image.display{image=img, legend='SIFT Key Points', win=win}
+           win = image.display{image=img, legend='SIFT Key Points', win=win, gui=false}
            -- draw one circle per frame
            win:batchBegin()
            if frames then
@@ -194,7 +194,7 @@ if not vlfeatLoaded then
            -- disp images
            local ofx = imgs[1]:size(1)
            win = image.displayList{images={imgs[1],imgs[2]}, window=win,
-                                   win_w=ofx*2, legend='SIFT Matches'}
+                                   win_w=ofx*2, legend='SIFT Matches', gui=false}
            win:batchBegin()
            if matches and matches:nDimension() == 2 then
               -- max defaults to all

@@ -51,6 +51,15 @@ function SpatialMaxPooling:__init(kW, kH, dW, dH)
    self.indices = torch.Tensor()
 end
 
+function SpatialMaxPooling:empty()
+   self.gradInput:resize()
+   self.gradInput:storage():resize(0)
+   self.output:resize()
+   self.output:storage():resize(0)
+   self.indices:resize()
+   self.indices:storage():resize(0)
+end
+
 function SpatialMaxPooling:write(file)
    parent.write(self, file)
    file:writeInt(self.kW)

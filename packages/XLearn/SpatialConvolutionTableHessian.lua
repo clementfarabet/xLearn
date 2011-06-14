@@ -35,8 +35,8 @@ function SpatialConvolutionTableHessian:oneLearningRates()
 end
 
 function SpatialConvolutionTableHessian:boundLearningRates(mu)
-   self.weightLearningRate:add(mu)
-   self.biasLearningRate:add(mu)
+   self.weightLearningRate:abs():add(mu)
+   self.biasLearningRate:abs():add(mu)
 end
 
 function SpatialConvolutionTableHessian:updateLearningRates(factor)

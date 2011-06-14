@@ -45,6 +45,11 @@ function SpatialLinear:updateParameters(learningRate)
    self.bias:add(-learningRate, self.gradBias)
 end
 
+function SpatialLinear:decayParameters(decay)
+   self.weight:add(-decay, self.weight)
+   self.bias:add(-decay, self.bias)
+end
+
 function SpatialLinear:forward(input)
    -- resize output
    self.output:resize(input:size(1), input:size(2), self.fanout)

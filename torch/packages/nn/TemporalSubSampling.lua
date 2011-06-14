@@ -75,6 +75,11 @@ function TemporalSubSampling:updateParameters(learningRate)
    self.bias:add(-learningRate, self.gradBias)
 end
 
+function TemporalSubSampling:decayParameters(decay)
+   self.weight:add(-decay, self.weight)
+   self.bias:add(-decay, self.bias)
+end
+
 function TemporalSubSampling:write(file)
    parent.write(self, file)
    file:writeInt(self.kW)

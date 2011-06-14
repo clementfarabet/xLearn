@@ -247,6 +247,7 @@ public slots:
   void queueSlot();
   void stopSlot() {}
   void emitStateChanged(State s) { emit stateChanged(s); }
+  void emitEvalDone() { emit evalDone(); }
   void emitPauseSignal() { emit stateChanged(QtLuaEngine::Paused); }
   void emitReadySignal() { emit readySignal(); }
   void emitQueueSignal() { emit queueSignal(); }
@@ -258,6 +259,7 @@ signals:
   void readySignal();
   void queueSignal();
   void stopSignal();
+  void evalDone();
 public:
   QtLuaEngine *q;
   lua_State   *L;
@@ -346,6 +348,8 @@ QtLuaEngine::Private::Private(QtLuaEngine *parent)
           q, SIGNAL(stateChanged(int)));
   connect(this, SIGNAL(errorMessage(QByteArray)), 
           q, SIGNAL(errorMessage(QByteArray)));
+  connect(this, SIGNAL(evalDone()), 
+          q, SIGNAL(evalDone()));
 }
 
 
@@ -1113,10 +1117,14 @@ bool
 QtLuaEngine::stop(bool nopause)
 {
   QMutexLocker locker(&d->mutex);
-  if (d->pauseLoop && nopause)
-    return d->resumeHelper(1);
-  if (d->rflag && !d->pauseLoop)
-    return d->stopHelper(nopause);
+  if (d->pauseLoop && nopause) {
+    bool ret = d->resumeHelper(1);
+    return ret;
+  }
+  if (d->rflag && !d->pauseLoop) {
+    bool ret = d->stopHelper(nopause);
+    return ret;
+  }
   return false;
 }
 
@@ -1165,6 +1173,9 @@ lua_eval_func(lua_State *L)
     luaQ_print(L, lua_gettop(L) - 2);
   if (error)
     lua_error(L);
+
+  d->emitEvalDone();
+
   return lua_gettop(L) - 2;
 }
 

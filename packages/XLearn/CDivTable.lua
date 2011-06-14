@@ -22,6 +22,14 @@ function CDivTable:backward(input, gradOutput)
    return self.gradInput
 end
 
+function CDivTable:empty()
+   self.gradInput[1]:resize()
+   self.gradInput[1]:storage():resize(0)
+   self.gradInput[2]:resize()
+   self.gradInput[2]:storage():resize(0)
+   self.output:resize()
+   self.output:storage():resize(0)
+end
 
 function CDivTable:write(file)
    parent.write(self, file)

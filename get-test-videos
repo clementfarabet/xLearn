@@ -1,0 +1,11 @@
+#!/bin/bash
+
+mkdir -p datasets/videos
+cd datasets/videos
+wget http://data.neuflow.org/data/video-65th-st.mov
+wget http://data.neuflow.org/data/desktop.mov
+wget http://data.neuflow.org/data/street-ped.mov
+wget http://data.neuflow.org/data/stereo-1.avi
+wget http://data.neuflow.org/data/stereo-2.avi
+wget http://data.neuflow.org/data/stereo-3.avi
+

@@ -108,3 +108,14 @@ INSTALL
 
     example of a local install:
     $ make install INSTALL_PREFIX=~/local
+
+
+================================================================================
+DOC
+
+The documentation is built and installed, and then available at:
+/usr/local/share/torch/html/index.html
+or
+INSTALL_PREFIX/share/torch/html/index.html
+
+All details about installation are available there.

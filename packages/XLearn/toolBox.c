@@ -11,6 +11,10 @@
 #include <string.h>
 #include <math.h>
 //#include <ncurses.h>
+/* need to check these headers on OSX */
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 // Useful macros
 #ifndef max
@@ -53,12 +57,9 @@ int image_threshold(lua_State *L) {
 }
 
 int image_maskToRGB(lua_State *L) {
-  THTensor *mask = luaT_checkudata(L, 1, 
-				   luaT_checktypename2id(L, "torch.Tensor"));
-  THTensor *colorMap = luaT_checkudata(L, 2, 
-				       luaT_checktypename2id(L, "torch.Tensor"));
-  THTensor *rgbmap = luaT_checkudata(L, 3, 
-				     luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *mask = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *colorMap = luaT_checkudata(L, 2, luaT_checktypename2id(L, "torch.Tensor"));
+  THTensor *rgbmap = luaT_checkudata(L, 3, luaT_checktypename2id(L, "torch.Tensor"));
 
   double * data_mask = mask->storage->data+ mask->storageOffset;
   double * data_colorMap = colorMap->storage->data+ colorMap->storageOffset; 
@@ -76,35 +77,222 @@ int image_maskToRGB(lua_State *L) {
   int r_size_1 = rgbmap->size[1];
   int r_size_2 = rgbmap->size[2];
 
-  //DEBUG
-  // printf("colorMap sizes: %d, %d, %d\n", c_size_0, c_size_1, c_size_2);
-  //printf("mask sizes: %d, %d, %d\n", m_size_0, m_size_1, m_size_2);
-  //printf("rgbmap sizes: %d, %d, %d\n", r_size_0, r_size_1, r_size_2);
-
   int k, i,j;
   int pointer = 0;
-  /* for (i = 0; i < mask->size[0]; i++){ */
-/*     for(j = 0; j < mask->size[1]; j ++){ */
-/*       int mask_i = data_mask[pointer]; */
-/*       printf("i = %d, j = %d, mask[i,j] = %d\n", i, j, mask_i); */
-/*       pointer++; */
-      
-/*     } */
-/*   } */
+
   int size = mask->size[0]*mask->size[1];
   for(k = 0; k < 3; k++ ){
     for(pointer = 0; pointer < size; pointer++){
-      int mask_i = data_mask[pointer];
-      //DEBUG
-      //printf("k = %d, pointer = %d,mask_i = %d, colorMap[mask_i] = %f\n",
-      // 	     k, pointer, mask_i, data_colorMap[k*c_size_0 + mask_i - 1]);
-      
+      int mask_i = data_mask[pointer];      
       data_rgbmap[k*size + pointer] = data_colorMap[k*c_size_0 + mask_i - 1];
     }
   }
   return 1;  
 }
 
+#define rgb2hash(r,g,b) ( (int)(r*256*256 + g*256 + b) )
+
+int image_mergeVectorsIntoSegm(lua_State *L) {
+  // tensor id
+  const void * tid = luaT_checktypename2id(L, "torch.Tensor");
+
+  // merge vectors into segm
+  THTensor *vectors = luaT_checkudata(L, 1, tid);
+  THTensor *segm = luaT_checkudata(L, 2, tid);
+  int nbClusters = lua_tonumber(L, 4);
+  int minConfidence = 0;
+  if (lua_isnumber(L,4)) minConfidence = lua_tonumber(L, 4);
+
+  // check
+  if ((vectors->nDimension != 3) || (segm->nDimension != 3))
+    THError("<image.mergeSegms> expecting 3D tensors");
+
+  // get dims
+  int width = vectors->size[0];
+  int height = vectors->size[1];
+  int nbClasses = vectors->size[2];
+
+  // final cluster list
+  lua_newtable(L);  // f = {}
+  int table_clean = lua_gettop(L);
+
+  // temporary geometry list
+  lua_newtable(L);  // g = {}
+  int table_geometry = lua_gettop(L);
+
+  // temporary histogram list
+  lua_newtable(L);  // c = {}
+  int table_hists = lua_gettop(L);
+
+  // optional confidence map
+  THTensor *confidence = THTensor_newWithSize2d(width, height);
+  THTensor *helper = THTensor_newWithSize1d(nbClasses);
+
+  // loop over segm, and accumulate histograms of vectors pixels
+  int x,y,k;
+  THTensor *histo = NULL;
+  THTensor *select1 = THTensor_new();
+  THTensor *select2 = THTensor_new();
+  for (y=0; y<height; y++) {
+    for (x=0; x<width; x++) {
+      // compute hash codes for vectors and segm
+      int segm_hash = rgb2hash(THTensor_get3d(segm,x,y,0),
+                               THTensor_get3d(segm,x,y,1),
+                               THTensor_get3d(segm,x,y,2));
+      // is this hash already registered ?
+      lua_pushinteger(L,segm_hash);
+      lua_rawget(L,table_hists);   // c[segm_hash]
+      if (lua_isnil(L,-1)) {    // c[segm_hash] == nil ?
+        lua_pop(L,1);
+        // then create a vector to accumulate an histogram of classes,
+        // for this cluster
+        histo = THTensor_newWithSize1d(nbClasses);
+        THTensor_zero(histo);
+        lua_pushinteger(L,segm_hash);
+        luaT_pushudata(L, histo, tid);
+        lua_rawset(L,table_hists); // c[segm_hash] = histo
+      } else {
+        // retrieve histo
+        histo = luaT_toudata(L, -1, tid);
+        lua_pop(L,1);
+      }
+
+      // slice the class vector
+      THTensor_select(select1, vectors, 0, x);
+      THTensor_select(select2, select1, 0, y);
+
+      // measure confidence
+      THTensor_copy(helper, select2);
+      double max = -1000;
+      double idx = 0;
+      for (k=0; k<nbClasses; k++) {
+        double val = THTensor_get1d(helper, k);
+        if (val > max) {
+          max = val; idx = k;
+        }
+      }
+      THTensor_set1d(helper, idx, -1000);
+      double max2 = -1000;
+      for (k=0; k<nbClasses; k++) {
+        double val = THTensor_get1d(helper, k);
+        if (val > max2) {
+          max2 = val;
+        }
+      }
+      double local_conf = max-max2;
+      if (local_conf < 0) THError("assert error : max < 2nd max");
+
+      // accumulate current vector into histo
+      if (local_conf >= minConfidence)
+        THTensor_addTensor(histo, 1, select2);
+
+      // store confidence
+      THTensor_set2d(confidence, x, y, local_conf);
+    }
+  }
+
+  // then merge vectors into segm, based on the histogram's winners
+  THTensor_zero(vectors);
+  for (y=0; y<height; y++) {
+    for (x=0; x<width; x++) {
+      // compute hash codes for vectors and segm
+      int segm_hash = rgb2hash(THTensor_get3d(segm,x,y,0),
+                               THTensor_get3d(segm,x,y,1),
+                               THTensor_get3d(segm,x,y,2));
+      // get max
+      int argmax = 0, max = -1;
+      // get geometry entry
+      lua_pushinteger(L,segm_hash);
+      lua_rawget(L,table_geometry);
+      if (lua_isnil(L,-1)) {    // g[segm_hash] == nil ?
+        lua_pop(L,1);
+        // retrieve histogram
+        lua_pushinteger(L,segm_hash);
+        lua_rawget(L,table_hists);   // c[segm_hash]  (= histo)
+        histo = luaT_toudata(L, -1, tid);
+        lua_pop(L,1);
+        // compute max
+        int i;
+        for (i=0; i<nbClasses; i++) {
+          if (max <= THTensor_get1d(histo,i)) { argmax = i; max = THTensor_get1d(histo,i); }
+        }
+        // then create a table to store geometry of component:
+        // x,y,size,class,hash
+        lua_pushinteger(L,segm_hash);
+        lua_newtable(L);
+        int entry = lua_gettop(L);
+        lua_pushnumber(L, x+1);
+        lua_rawseti(L,entry,1); // entry[1] = x
+        lua_pushnumber(L, y+1);
+        lua_rawseti(L,entry,2); // entry[2] = y
+        lua_pushnumber(L, 1);
+        lua_rawseti(L,entry,3); // entry[3] = size (=1)
+        lua_pushnumber(L, argmax+1);
+        lua_rawseti(L,entry,4); // entry[4] = class (=argmax+1)
+        lua_pushnumber(L, segm_hash);
+        lua_rawseti(L,entry,5); // entry[5] = hash
+        // store entry
+        lua_rawset(L,table_geometry); // g[segm_hash] = entry
+      } else {
+        // retrieve entry
+        int entry = lua_gettop(L);
+        lua_rawgeti(L, entry, 1);
+        long cx = lua_tonumber(L, -1); lua_pop(L, 1);
+        lua_pushnumber(L, cx+x+1);
+        lua_rawseti(L, entry, 1); // entry[1] = cx + x + 1
+        lua_rawgeti(L, entry, 2);
+        long cy = lua_tonumber(L, -1); lua_pop(L, 1);
+        lua_pushnumber(L, cy+y+1);
+        lua_rawseti(L, entry, 2); // entry[2] = cy + y + 1
+        lua_rawgeti(L, entry, 3);
+        long size = lua_tonumber(L, -1) + 1; lua_pop(L, 1);
+        lua_pushnumber(L, size);
+        lua_rawseti(L, entry, 3); // entry[3] = size + 1
+        lua_rawgeti(L, entry, 4);
+        argmax = lua_tonumber(L, -1) - 1; lua_pop(L, 1);
+        // and clear entry
+        lua_pop(L,1);
+      }
+      // set argmax (winning class) to 1
+      THTensor_set3d(vectors, x, y, argmax, 1);
+    }
+  }
+
+  // traverse geometry table to produce final component list
+  lua_pushnil(L);
+  int cur = 1;
+  while (lua_next(L, table_geometry) != 0) {
+    // uses 'key' (at index -2) and 'value' (at index -1)
+
+    // normalize cx and cy, by component's size
+    int entry = lua_gettop(L);
+    lua_rawgeti(L, entry, 3);
+    long size = lua_tonumber(L, -1) + 1; lua_pop(L, 1);
+    lua_rawgeti(L, entry, 1);
+    long cx = lua_tonumber(L, -1); lua_pop(L, 1);
+    lua_pushnumber(L, cx/size);
+    lua_rawseti(L, entry, 1); // entry[1] = cx/size
+    lua_rawgeti(L, entry, 2);
+    long cy = lua_tonumber(L, -1); lua_pop(L, 1);
+    lua_pushnumber(L, cy/size);
+    lua_rawseti(L, entry, 2); // entry[2] = cy/size
+
+    // store entry table into clean table
+    lua_rawseti(L, table_clean, cur++);
+  }
+
+  // pop/remove histograms
+  lua_pop(L, 1);
+
+  // cleanup
+  THTensor_free(select1);
+  THTensor_free(select2);
+  THTensor_free(helper);
+
+  // return two tables: indexed and hashed, plus the confidence map
+  luaT_pushudata(L, confidence, luaT_checktypename2id(L, "torch.Tensor"));
+  return 3;
+}
 
 int image_lower(lua_State *L) {
   THTensor *input = luaT_checkudata(L, 1, 
@@ -268,6 +456,47 @@ int toolbox_dist2vectors(lua_State *L){
   return 1;
 }
 
+int toolbox_print_tensor_formatted(lua_State *L){
+  /* get the arguments */
+  THTensor * to_print = luaT_checkudata(L, 1, luaT_checktypename2id(L, "torch.Tensor"));
+  const char *filename = luaL_checkstring(L, 2);
+
+
+  double * data = to_print->storage->data+ to_print->storageOffset;
+  
+  int size_data_c = to_print->size[0];
+  int size_data_r = to_print->size[1];
+  int size_data_m = to_print->size[2];
+  if (to_print->nDimension < 3)
+    size_data_m = 1;
+
+  int m,i,j;
+
+  FILE* fp = fopen(filename, "w");
+  printf("file name, for writting: %s\n\n", filename);
+  //DEBUG
+  //printf("size_data_c = %d, size_data_r = %d, size_data_m = %d\n", size_data_c, size_data_r, size_data_m);
+  
+  double* ptr_o = data;
+  for (m = 0; m < size_data_m; m++){
+    for (i = 0; i < size_data_r; i++){
+      for (j = 0; j < size_data_c; j++){
+	fprintf(fp,"%.14f ", ptr_o[j+ i*to_print->stride[1] + m*to_print->stride[2]]);
+	//printf("%.4f ", ptr_o[j*to_print->stride[0]]);
+      }
+      //ptr_o = ptr_o + to_print->stride[1];
+      fprintf(fp,"\n");
+      ///printf("\n");
+    }
+    fprintf(fp,"\n");
+    //printf("\n");
+  }
+  
+  return 0;
+
+}
+
+
 
 /*
  * This function perfoms convolution between 3D tensors 
@@ -310,8 +539,9 @@ int toolbox_convFixedPoint(lua_State *L){
   
   // DEBUG
   /* printf("input dim = %d, output dim = %d, kernel dim = %d\n", input->nDimension, output->nDimension, kernel->nDimension); */
-/*   printf("input->stride[0] = %d, input->stride[1] = %d, input->stride[2] = %d\n", input->stride[0], input->stride[1], input->stride[2]); */
+/*   printf("output->stride[0] = %d, output->stride[1] = %d, output->stride[2] = %d\n", output->stride[0], output->stride[1], output->stride[2]); */
 /*   printf("size_output_c = %d, size_output_r = %d, maps = %d\n", size_output_c, size_output_r, size_output_m); */
+/*   printf("input->stride[0] = %d, input->stride[1] = %d, input->stride[2] = %d\n", input->stride[0], input->stride[1], input->stride[2]); */
 /*   printf("size_input_c = %d, size_input_r = %d, maps = %d\n", size_input_c, size_input_r, size_input_m); */
 /*   printf("size_kernel_c = %d, size_kernel_r = %d, maps = %d\n", size_kernel_c, size_kernel_r, size_kernel_m); */
   
@@ -347,13 +577,16 @@ int toolbox_convFixedPoint(lua_State *L){
   
 /*   printf("data_output:\n"); */
 /*   ptr_o = data_output; */
-/*   for (i = 0; i < size_output_r; i++){ */
-/*     for (j = 0; j < size_output_c; j++){ */
-/*       printf("%.4f ", ptr_o[j*output->stride[0]]); */
+/*   for (m = 0; m < size_output_m; m++){ */
+/*     for (i = 0; i < size_output_r; i++){ */
+/*       for (j = 0; j < size_output_c; j++){ */
+/* 	printf("%.4f ", ptr_o[j*output->stride[0]]); */
+/*       } */
+/*       ptr_o = ptr_o + output->stride[1]; */
+/*       printf("\n"); */
 /*     } */
-/*     ptr_o = ptr_o + output->stride[1]; */
 /*     printf("\n"); */
-/*  } */
+/*   } */
   
   int* input_int = (int*)malloc(sizeof(int)*size_input_c*size_input_r*size_input_m);
   int* output_int = (int*)malloc(sizeof(int)*size_output_c*size_output_r*size_output_m);
@@ -409,7 +642,7 @@ int toolbox_convFixedPoint(lua_State *L){
 	    //int res = *(kernel_int + l + k*size_kernel_c) *
 	    //  *(input_int + in_i + in_j*size_input_c);
 	    
-	    int res = *(kernel_int + l + k*size_kernel_r) *
+	    int res = *(kernel_int + k + l*size_kernel_r) *
 	      *(input_int + in_i + in_j*size_input_r + m*input->stride[2]);
 	    
 	    sum += res;
@@ -438,6 +671,24 @@ int toolbox_convFixedPoint(lua_State *L){
       ptr_o += output->stride[1];
     }
   }
+
+
+  //DEBUG
+  /* printf("data_output:\n"); */
+/*   ptr_o = data_output; */
+/*   for (m = 0; m < size_output_m; m++){ */
+/*     for (i = 0; i < size_output_r; i++){ */
+/*       for (j = 0; j < size_output_c; j++){ */
+/* 	printf("%.4f ", ptr_o[j*output->stride[0]]); */
+/*       } */
+/*       ptr_o = ptr_o + output->stride[1]; */
+/*       printf("\n"); */
+/*     } */
+/*     printf("\n"); */
+/*   } */
+  
+
+
   
   // free the allocated memory
   free(input_int);
@@ -1108,6 +1359,21 @@ int image_hsv2rgb(lua_State *L) {
   return 0;
 }
 
+
+/* calls POSIX fstat from c lib rather than executing */
+int toolbox_fstat_time(lua_State *L) {
+  const char * fname = luaL_checkstring(L, 1);
+  int file=0;
+  if((file=open(fname,O_RDONLY)) < -1)
+    return 0;
+  struct stat fileStat;
+  if(fstat(file,&fileStat) < 0)    
+    return 0;
+  lua_pushnumber(L, (double) fileStat.st_atime);
+  lua_pushnumber(L, (double) fileStat.st_ctime);
+  lua_pushnumber(L, (double) fileStat.st_mtime);
+  return 3;
+}
 
 /*
 int toolbox_ncurseStart(lua_State *L) {

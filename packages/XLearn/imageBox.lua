@@ -247,7 +247,7 @@ do
    --
    function image.display(...)
       -- usage
-      local _, input, zoom, min, max, legend, w, wx, wy, w2 = toolBox.unpack(
+      local _, input, zoom, min, max, legend, w, wx, wy, w2, gui = toolBox.unpack(
          {...},
          'image.display',
          'displays a single image, with optional saturation/zoom;\n'
@@ -258,28 +258,107 @@ do
          {arg='max', type='number', help='upper-bound for range'},
          {arg='legend', type='string', help='legend', default='image.display'},
          {arg='win', type='gfx.Window', help='window descriptor'},
-         {arg='win_w', type='number', help='window width', default=1200},
-         {arg='win_h', type='number', help='window height', default=700},
-         {arg='window', type='gfx.Window', help='window descriptor (same as win, for compatibility)'}
+         {arg='win_w', type='number', help='window width [default = auto]'},
+         {arg='win_h', type='number', help='window height [default = auto]'},
+         {arg='window', type='gfx.Window', help='window descriptor (same as win, for compatibility)'},
+         {arg='gui', type='boolean', help='use a QT gui to visualize data', default=true}
       )
-
-      if input:nDimension() == 2 or input:size(3) == 1 or input:size(3) == 3 then
+      -- get painter
+      w = w or w2
+      -- if single image, blit, else transfer over to displayList
+      if input:nDimension() == 2 or (input:nDimension() == 3 and (input:size(3) == 1 or input:size(3) == 3)) then
          -- Rescale range
-         local myIn = image.scaleForDisplay{tensor=input, min=min, max=max}
+         local mminput = image.scaleForDisplay{tensor=input, min=min, max=max}
 
-         -- Rescale geometry
-         local x = math.min(input:size(1)*zoom,wx)
-         local y = math.min(input:size(2)*zoom,wy)
-         w = w or w2 or gfx.Window(x,y,legend)
+         -- Compute width
+         local x = wx or input:size(1)*zoom
+         local y = wy or input:size(2)*zoom
 
-         -- blit
-         w:blit(myIn, zoom)
+         -- autodetect qt
+         if qt and gui then -- make sure qt exists
+            -- if qt, use fancy window context
+            local closure = w
+            local hook_resize, hook_mouse
+            if closure and closure.window and closure.image then
+               closure.image = mminput
+               closure.refresh(x,y)
+            else
+               closure = {image=mminput}
+               hook_resize = function(wi,he)
+                                local qtimg = qt.QImage.fromTensor(closure.image)
+                                closure.painter:image(0,0,wi,he,qtimg)
+                                collectgarbage()
+                             end
+               hook_mouse = function(x,y,button)
+                               local size = closure.window.frame.size:totable()
+                               if button == 'LeftButton' then
+                                  size.width = size.width * 1.2
+                                  size.height = size.height * 1.2
+                               elseif button == 'RightButton' then
+                                  size.width = size.width / 1.2
+                                  size.height = size.height / 1.2
+                               end
+                               closure.window.frame.size = qt.QSize(size)
+                            end
+               closure.window, closure.painter = image.mediaWindow(hook_resize,hook_mouse)
+               closure.refresh = hook_resize
+            end
+            closure.window.size = qt.QSize{width=x,height=y}
+            closure.window.windowTitle = legend
+            hook_resize(x,y)
+            closure.window:show()
+            return closure
+         else
+            -- if not qt, create plain gfx window, and blit
+            w = w or gfx.Window(x,y,legend)
+            w:blit(mminput, zoom)
+         end
       else 
          -- multichanel image (collection of images/features)
-         w = image.displayList{images=input, zoom=zoom, min=min, max=max, window=w, legend=legend}
+         w = image.displayList{images=input, zoom=zoom, min=min, max=max, 
+                               window=w, legend=legend, gui=gui}
       end
-
+      -- return painter
       return w
+   end
+
+
+   ----------------------------------------------------------------------
+   -- creates a window context for images
+   --
+   function image.mediaWindow(hook_resize, hook_mousepress, hook_mousedoublepress)
+      toolBox.useQT()
+      local pathui = paths.concat(paths.install_lua_path, 'XLearn/imageWindow.ui')
+      local win = qtuiloader.load(pathui)
+      local painter = qt.QtLuaPainter(win.frame)
+      if hook_resize then
+         qt.connect(qt.QtLuaListener(win.frame), 
+                    'sigResize(int,int)', 
+                    hook_resize)
+      end
+      if hook_mousepress then
+         qt.connect(qt.QtLuaListener(win.frame),
+                    'sigMousePress(int,int,QByteArray,QByteArray,QByteArray)', 
+                    hook_mousepress)
+      end
+      if hook_mousedoublepress then
+         qt.connect(qt.QtLuaListener(win.frame),
+                    'sigMouseDoubleClick(int,int,QByteArray,QByteArray,QByteArray)',
+                    hook_mousedoublepress)
+      end
+      local ctrl = false
+      qt.connect(qt.QtLuaListener(win),
+                 'sigKeyPress(QString,QByteArray,QByteArray)',
+                 function (str, s2)
+                    if s2 and s2 == 'Key_Control' then
+                       ctrl = true
+                    elseif s2 and s2 == 'Key_W' and ctrl then
+                       win:close()
+                    else
+                       ctrl = false
+                    end
+                 end)
+      return win,painter
    end
 
 
@@ -687,18 +766,36 @@ do
    ----------------------------------------------------------------------
    --- computes an histogram of a given tensor
    --
-   function lab.hist(tensor,bins)
-      local bins = bins or 10
+   function lab.hist(...)
+
+      local _,tensor,bins,min,max
+         = toolBox.unpack(
+         {...},
+         'lab.hist',
+         'computes histogram of tensor',
+         {arg='tensor', type='torch.Tensor', help='tensor for histogram', req=true},
+         {arg='bins', type='number', help='number of bins in histogram', default=10},
+         {arg='min', type='number', help='left edge minimum bin (default=tensor.min())'},
+         {arg='max', type='number', help='right edge maximum bin (default=tensor.max())'}
+      )
       local hist = {}
-      local ten = torch.Tensor():resizeAs(tensor):copy(tensor)
-      local min = ten:min()
-      local max = ten:max()
-      ten:add(-min):div(max):mul(bins - 1e-6):floor():add(1)
+      local ten = torch.Tensor(tensor:nElement()):copy(tensor)
+      if not min then min = ten:min() end
+      if not max then max = ten:max() end
+      ten:add(-min):div(max-min):mul(bins - 1e-6):floor():add(1)
       for i = 1,bins do
          hist[i] = 0
       end
       ten:apply(function (x)
-                   hist[x] = hist[x] + 1
+		   -- need to treat edge cases if we allow arbitrary
+		   -- min and max args.
+		   if x < 1 then
+		      hist[1] = hist[1] + 1
+		   elseif x > bins then
+		      hist[bins] = hist[bins] + 1
+		   else
+		      hist[x] = hist[x] + 1
+		   end
                 end)
 
       -- cleanup hist
@@ -715,9 +812,71 @@ do
       end
       cleanhist.max = cleanhist[mx[1]]
       cleanhist.min = cleanhist[mn[1]]
+
+      -- print function
+      local tostring = function()
+                          lab.display_hist(cleanhist)
+                       end
+      setmetatable(cleanhist, {__tostring=tostring})
       return cleanhist
    end
 
+   -- rudimentary histogram diplay on the command line.
+   function lab.display_hist(h, barHeight)
+      if not barHeight then barHeight = 10 end
+      local m =  h.max.nb + h.max.nb * 0.1
+      local tl = torch.Tensor(#h):fill(0)
+      local incr = (m/barHeight)
+      local top = '+-+'
+      local bar = '| |'
+      local blank = '   '
+      io.write('nsamples|')
+      io.write(string.format('  minbin: %d val %2.2f maxbin: %d val %2.2f\n',
+			     h.min.nb,h.min.val,
+			     h.max.nb,h.max.val))
+      io.write('--------+\n')
+      for i = 1,barHeight do
+	 -- y axis
+	 if i%1==0 then
+	    io.write(string.format('%7d |',m))
+	 end
+	 for j = 1,#h do 
+	    if tl[j] == 1 then
+	       io.write(bar)
+	    elseif h[j].nb > m then
+	       tl[j] = 1
+	       io.write(top)
+	    else
+	       io.write(blank)
+	    end 
+	 end 
+	 io.write('\n')
+	 m = m - incr
+      end
+      -- x axis
+      io.write(string.format('--------+-^-'))
+      for j = 1,#h,2 do 
+	 io.write(string.format('----^-'))
+      end
+      io.write('\ncenters ')
+      for j = 1,#h,2 do 
+	 if h[j].val < 0 then
+	    io.write('-')
+	 else
+	    io.write(' ')
+	 end
+	 io.write(string.format('%2.2f ',math.abs(h[j].val)))
+      end
+      if #h%2==0 then
+	 if h[#h].val < 0 then
+	    io.write('-')
+	 else
+	    io.write(' ')
+	 end
+	 io.write(string.format('%2.2f ',math.abs(h[#h].val)))
+      end
+      io.write('\n')
+   end
 
 
    ----------------------------------------------------------------------
@@ -812,7 +971,8 @@ do
    function image.displayList(...)
       -- usage
       local _, images, zoom, min, max, offset_x, offset_y, 
-      legend, legends, window, window_w, window_h, window2, font = toolBox.unpack(
+      legend, legends, window, window_w, window_h, window2, font, 
+      nhtiles, gui = toolBox.unpack(
          {...},
          'image.displayList',
          'displays a list of images on a 2D grid;\n' ..
@@ -826,15 +986,16 @@ do
          {arg='legend', type='string', help='window title', default='image.displayList'},
          {arg='legends', type='string', help='individual legends'},
          {arg='win', type='gfx.Window', help='window descriptor'},
-         {arg='win_w', type='number', help='window width', default=1200},
-         {arg='win_h', type='number', help='window height', default=700},
+         {arg='win_w', type='number', help='legacy - not used anymore'},
+         {arg='win_h', type='number', help='legacy - not used anymore'},
          {arg='window', type='gfx.Window', help='window descriptor (same as win, for compat)'},
-         {arg='font', type='number', help='font size [default = 10*zoom]'}
+         {arg='font', type='number', help='font size', default=14},
+         {arg='nhtiles', type='number', help='nb of horizontal tiles [default = ceil(sqrt(#images))]'},
+         {arg='gui', type='boolean', help='use a QT gui to visualize data', default=true}
       )
 
-
       -- create painter
-      local painter = window or window2 or gfx.Window(window_w, window_h, legend)
+      local win = window or window2
 
       -- if images are in a tensor form, then create a list
       if type(images) == 'userdata' then
@@ -853,33 +1014,80 @@ do
          error(image.displayList_usage)
       end
 
+      -- rescale images
+      local mminputs = {}
+      for i = 1,#images do
+         mminputs[i] = image.scaleForDisplay{tensor=images[i], min=min, max=max}
+      end
+
+      -- nb of horizontal tiles ?
+      nhtiles = nhtiles or math.ceil(math.sqrt(#images))
+      window_w = images[1]:size(1) * zoom * nhtiles
+
+      -- figure out sizes
+      local offx = 0
+      local offy = 0
+      local maxx = 0
+      local maxy = 0
+      for i = 1,#images do
+         offx = offx + images[i]:size(1)*zoom
+         if maxy < images[i]:size(2)*zoom then maxy = images[i]:size(2)*zoom end
+         if offx > window_w then
+            offx = images[i]:size(1)*zoom
+            offy = offy + maxy
+            maxy = images[i]:size(2)*zoom
+         end
+         if maxx < offx then maxx = offx end
+      end
+      maxy = offy + maxy
+
+      -- gfx win or qt gui
+      local painter = win
+      if qt and gui then -- make sure qt exists
+         if win then          
+            gui = false
+            painter = win
+         else
+            painter = gfx.ImageSurface(maxx, maxy)
+         end
+      else
+         painter = win or gfx.Window(maxx, maxy, legend)
+      end
+
       -- helper for legends
       local boldtxt = 
          function (text,x,y)
             local p
             for i=-1,1 do
                for j=-1,1 do
-                  p=painter:text(text, x*zoom+i, y*zoom+j, font or 12*zoom)
+                  p=painter:text(text, x*zoom+i, y*zoom+j, font)
                end
             end
             p:set('penColor',{0,0,0})
-            painter:text(text, x*zoom, y*zoom, font or 12*zoom):set('penColor',{1,1,1})
+            painter:text(text, x*zoom, y*zoom, font):set('penColor',{1,1,1})
          end
 
       -- display images
       local max_height = 0
+      local max_x = 0
+      local max_y = 0
       painter:batchBegin()
       for i = 1,#images do
-         local imageNormed = image.scaleForDisplay{tensor=images[i], 
-                                                   min=min, max=max}
+         local imageNormed = mminputs[i]
          if (offset_x + imageNormed:size(1)*zoom) > window_w then
             offset_x = 0
             offset_y = offset_y + max_height*zoom
             max_height = 0
          end
          painter:blit(imageNormed, zoom, offset_x, offset_y)
+         if offset_x+imageNormed:size(1) > max_x then
+            max_x = offset_x+imageNormed:size(1)*zoom
+         end
+         if offset_y+imageNormed:size(2) > max_y then
+            max_y = offset_y+imageNormed:size(2)*zoom
+         end
          if legends and legends[i] then
-            boldtxt(legends[i], offset_x/zoom+5, offset_y/zoom+imageNormed:size(2)-3)
+            boldtxt(legends[i], offset_x/zoom+8, offset_y/zoom+imageNormed:size(2)-3)
          end
          offset_x = offset_x + imageNormed:size(1)*zoom
          if imageNormed:size(2) > max_height then
@@ -887,6 +1095,12 @@ do
          end
       end
       painter:batchEnd()
+
+      -- if gui active, display result in a mediaWindow
+      if qt and gui then
+         painter:redraw()
+         image.display{image=painter.lcairo_object:toTensor(), legend=legend, min=0, max=1}
+      end
 
       -- return display
       return painter, offset_x, offset_y
@@ -970,90 +1184,76 @@ do
       return maxMap:select(3,1)
    end
 
-   function image.maskToRGB_old(mask, colorMap)
-      local rgbmap = lab.zeros(mask:size(1), mask:size(2), 3)
-      rgbmap:select(3,1):map(mask, function(rgb, seg) return colorMap[seg][1] end)
-      rgbmap:select(3,2):map(mask, function(rgb, seg) return colorMap[seg][2] end)
-      rgbmap:select(3,3):map(mask, function(rgb, seg) return colorMap[seg][3] end)
-      return rgbmap
-   end
-
    function image.maskToRGB(mask, colorMap, rgbmap)
       rgbmap = rgbmap or lab.zeros(mask:size(1), mask:size(2), 3)
-      rgbmap:fill(0)
-
-      -- DEBUG
-      --print('colorMap size: ')
-      --print(colorMap:size())
-      -- print('mask size: ')
-      -- print(mask:size())
-      --print('rgbmap size: ')
-      --print(rgbmap:size())
-      --print(colorMap)
-      --print(mask)
-      -- rgbmap:select(3,1):map(mask, function(rgb, seg) return colorMap[seg][1] end)
-      -- rgbmap:select(3,2):map(mask, function(rgb, seg) return colorMap[seg][2] end)
-      -- rgbmap:select(3,3):map(mask, function(rgb, seg) return colorMap[seg][3] end)
-      
-      -- for k = 1,3 do
-      -- 	 for i=1,rgbmap:size(1) do
-      -- 	    for j = 1, rgbmap:size(2) do
-      -- 	       rgbmap[i][j][k] = colorMap[mask[i][j]][k]
-      -- 	    end
-      -- 	 end
-      --       end
-      --local copyMask = torch.Tensor():resizeAs(mask):copy(mask)
-      --local copyColorMap = torch.Tensor():resizeAs(colorMap):copy(colorMap)
-      --libxlearn.image_maskToRGB(copyMask, copyColorMap, rgbmap)
       libxlearn.image_maskToRGB(mask, colorMap, rgbmap)
-
       return rgbmap
    end
 
-   function image.rescaleSegmentation_old(rgbmask, upsampling, input)
-      local upscaled = torch.Tensor():resizeAs(input):zero()
-      local startx = math.floor((input:size(1) - rgbmask:size(1)*upsampling)/2)
-      local starty = math.floor((input:size(2) - rgbmask:size(2)*upsampling)/2)
-      local rescaled = upscaled:narrow(1,startx,rgbmask:size(1)*upsampling):narrow(2,starty,rgbmask:size(2)*upsampling) 
+   function image.rescaleSegmentation(...)
+      -- usage
+      local _, rgbmask, upsampling, input, upscaled
+         = toolBox.unpack(
+         {...},
+         'image.rescaleSegmentation',
+         'rescales a segmentation mask (typically the output of a neural net)',
+         {arg='mask', type='torch.Tensor', help='mask (WxHxN or WxH)', req=true},
+         {arg='upsampling', type='number', help='upsampling ratio for mask', default=1},
+         {arg='image', type='torch.Tensor', help='input image (WxHx3)', req=true},
+         {arg='result_mask', type='torch.Tensor', help='resulting mask (created if not given)'}
+      )
+      upscaled = upscaled or torch.Tensor():resizeAs(input):zero()
+      local startx = math.floor((input:size(1) - rgbmask:size(1)*upsampling)/2) + 1
+      local starty = math.floor((input:size(2) - rgbmask:size(2)*upsampling)/2) + 1
+      local rescaled = upscaled:narrow(1,startx,rgbmask:size(1)*upsampling):narrow(2,starty,rgbmask:size(2)*upsampling)
       image.scale(rgbmask, rescaled, 'bilinear')
       return upscaled
    end
 
-   function image.rescaleSegmentation(rgbmask, upsampling, input, upscaled)
-      --local upscaled = torch.Tensor():resizeAs(input):zero()
-      upscaled:fill(0)
-      local startx = math.floor((input:size(1) - rgbmask:size(1)*upsampling)/2)
-      local starty = math.floor((input:size(2) - rgbmask:size(2)*upsampling)/2)
-      local rescaled = upscaled:narrow(1,startx,rgbmask:size(1)*upsampling):narrow(2,starty,rgbmask:size(2)*upsampling) 
-      image.scale(rgbmask, rescaled, 'bilinear')
-      return upscaled
-   end
+   function image.applySegmentation(...)
+      -- usage
+      local _, input, mask, colorMap, upsampling, merged, scaledmask, result 
+         = toolBox.unpack(
+         {...},
+         'image.applySegmentation',
+         'applies a segmentation mask to an RGB image',
+         {arg='image', type='torch.Tensor', help='input image (WxHx3)', req=true},
+         {arg='mask', type='torch.Tensor', help='mask (WxHxN or WxH)', req=true},
+         {arg='colorMap', type='table | torch.Tensor', help='an associate color map', req=true},
+         {arg='upsampling', type='number', help='upsampling ratio for mask', default=1},
+         {arg='merges', type='table', help='a lookup table that remaps each class to another'},
+         {arg='result_mask', type='torch.Tensor', help='resulting mask (created if not given)'},
+         {arg='result_seg', type='torch.Tensor', help='resulting segm (created if not given)'}
+      )
 
+      -- process mask
+      local maxedOutput = mask
+      if mask:nDimension() == 3 then
+         maxedOutput = image.maxPoolingChannel(mask)
+      end
 
-
-
-   function image.applySegmentation(input, output, upsampling, colorMap, merged, rgbmap, upscaled, result)
-      local maxedOutput = image.maxPoolingChannel(output)
+      -- merge classes in mask
       if merged then
          maxedOutput:apply(function (x) return merged[x] end)
       end
-      
-      if not rgbmap then
-	 rgbmap = lab.zeros(output:size(1), output:size(2), 3)
-      end
-      if not upscaled then
-	 upscaled = torch.Tensor():resizeAs(input)
-      end
-      if not result then
-	 result = torch.Tensor():resizeAs(input)
-      end
 
+      -- defaults
+      scaledmask = scaledmask or torch.Tensor()
+      result = result or torch.Tensor()
 
-      local rgbmask = image.maskToRGB(maxedOutput, colorMap, rgbmap)
-      local scaledmask = image.rescaleSegmentation(rgbmask, upsampling, input, upscaled)
+      -- resize
+      scaledmask:resizeAs(input)
+      result:resizeAs(input)
+
+      -- mask -> RGB
+      local rgbmask = image.maskToRGB(maxedOutput, colorMap)
+
+      -- rescale mask
+      image.rescaleSegmentation{mask=rgbmask, image=input, upsampling=upsampling, 
+                                result_mask=scaledmask}
      
+      -- copy grayscale version of the input
       for i=1,3 do
-         -- copy grayscale version of the input
          result:select(3,i):copy(input:select(3,2))
       end
       result:add(scaledmask)
@@ -1073,24 +1273,44 @@ do
       local legend = args.legend or 'segmentation'
       local painter = args.painter 
          or qtwidget.newwindow((input:size(1)+140)*zoom, input:size(2)*zoom, legend)
-      local rgbmap = args.rgbmap or lab.zeros(mask:size(1), mask:size(2), 3)
-      local upscaled = args.upscaled or torch.Tensor():resizeAs(input)
+      local scaledmask = args.upscaled
+      local result = args.result
+      local components = args.components
 
       -- merge mask and image
-      local result = args.result or torch.Tensor():resizeAs(input)
-      local scaledmask
-      if mask:size(1) == input:size(1) and mask:size(2) == input:size(2) then
-         result = image.mergeSegmentation(input, mask, colormap)
-      else
-         result,scaledmask = image.applySegmentation(input, mask, upsampling, 
-                                                     colormap, mergedClasses, rgbmap, upscaled, result)
-      end
+      result, scaledmask = image.applySegmentation{image=input, mask=mask, 
+                                                   colorMap=colormap, upsampling=upsampling, 
+                                                   merges=mergedClasses,
+                                                   result_mask=scaledmask, result_seg=result}
 
       -- paint tensor
       image.qtdisplay{tensor=result, painter=painter, globalzoom=zoom}
 
+      -- print components' names
+      -- components are assumed to be a list of entries, each entry being
+      -- an array: {[1]=x, [2]=y, [3]=size, [4]=class}
+      -- hard-coded filtering is done here: if size < 300 pixels, class is
+      -- not shown (should probably be changed for something smarter)
+      local fontsize = 10*zoom
+      local font = qt.QFont{serif=false,italic=false,size=fontsize}
+      painter:setfont(font)
+      painter:setcolor('black')
+      if components then
+         for _,component in ipairs(components) do
+            local size = component[3]
+            if size > 300 then
+               local class = classes[component[4]]
+               local x = component[1]*zoom - (#class)*fontsize/5
+               local y = component[2]*zoom + fontsize/4
+               painter:moveto(x,y)
+               painter:show(class)
+            end
+         end
+      end
+
       -- print classes
-      painter:setfont(qt.QFont{serif=false,italic=false,size=10*zoom})
+      font = qt.QFont{serif=false,italic=false,size=10*zoom}
+      painter:setfont(font)
       painter:setcolor('black')
       local height = math.floor(input:size(2) / #classes)
       for i,class in ipairs(classes) do
@@ -1109,7 +1329,7 @@ do
          painter:moveto(x,y)
          painter:show(class)
       end
-      
+
       -- for ref
       return result,scaledmask,painter
    end
@@ -1151,6 +1371,49 @@ do
 
 
    ----------------------------------------------------------------------
+   -- merge a 2D map of vectors (3D tensor) into an RGB segmentation
+   --
+   function image.mergeVectorsIntoSegm(...)
+      -- usage
+      local _, vectors, segm, nbClusters, upsampling, minConfidence
+         = toolBox.unpack(
+         {...},
+         'image.mergeVectorsIntoSegm',
+         'merges a map of vectors into an RGB segmentation image',
+         {arg='vectors', type='torch.Tensor', help='input vectors (WxHxN)', req=true},
+         {arg='segm', type='torch.Tensor', help='segmentation (WxHx3)', req=true},
+         {arg='nbClusters', type='number', help='number of clusters in segmentation', req=true},
+         {arg='upsampling', type='number', help='upsampling ratio for mask', default=1},
+         {arg='minConfidence', type='number', help='minimum confidence to accumulate histograms'}
+      )
+      -- in place?
+      local result, subsegm
+      local offx = 1
+      local offy = 1
+      if upsampling ~= 1 then
+         result = torch.Tensor(vectors:size(1)*upsampling, vectors:size(2)*upsampling, 
+                               vectors:size(3))
+         image.scale(vectors, result, 'simple')
+         offx = math.floor((segm:size(1) - result:size(1))/2) + 1
+         offy = math.floor((segm:size(2) - result:size(2))/2) + 1
+         subsegm = segm:narrow(1,offx,result:size(1)):narrow(2,offy,result:size(2))
+      else
+         result = torch.Tensor():resizeAs(vectors):copy(vectors)
+         subsegm = segm
+      end
+      -- compute
+      local iclusters,rclusters,confidence = libxlearn.mergeVectorsIntoSegm(result, subsegm, 
+                                                                            nbClusters, minConfidence)
+      -- realign clusters
+      for _,clust in ipairs(iclusters) do
+         clust[1] = clust[1] + offx - 1
+         clust[2] = clust[2] + offy - 1
+      end
+      return result, iclusters, rclusters, confidence
+   end
+
+
+   ----------------------------------------------------------------------
    -- image.qtdrawbox()    
    -- displays a box in a qt window
    --
@@ -1174,7 +1437,14 @@ do
       -- draw a box
       painter:setcolor(color)
       painter:newpath()
-      painter:rectangle(x*globalzoom,y*globalzoom,w*globalzoom*zoom,h*globalzoom*zoom)
+      if args.circle then
+         painter:arc(x*globalzoom,y*globalzoom,w*globalzoom*zoom,0,360)
+         -- shift x,y for legend
+         x = x - w*zoom
+         y = y - w*zoom
+      else
+         painter:rectangle(x*globalzoom,y*globalzoom,w*globalzoom*zoom,h*globalzoom*zoom)
+      end
       painter:closepath()
       painter:setlinewidth(width)
       painter:stroke()
@@ -1251,6 +1521,8 @@ do
       return output
    end
 
+   image.tconvolve = image.convolve -- original convolve from torch
+
    function image.convolve(input, kernel, mode)
       local function convolveSlice(input, kernel, mode)
          local output
@@ -1276,7 +1548,7 @@ do
       elseif input:nDimension() == 2 then
          return convolveSlice(input, kernel, mode)
       else
-         error("image.convolve only handles 2D or 3D tensor")
+         xerror("image.convolve only handles 2D or 3D tensor", "image.convolve")
       end
    end
 
@@ -1970,31 +2242,31 @@ do
    function image.displayNetwork(...)
       toolBox.useQT()
       -- parse args
-      local args,network,dumpfile,legend,input,dispInput,dispFilters,globalzoom,filterzoom,painter = toolBox.unpack(
+      local args,network,dumpfile,legend,input,dispInput,dispFilters,globalzoom,filterzoom,painter,width,height = toolBox.unpack(
          {...},
          'image.displayNetwork',
          'displays the internal weights of a network',
          {arg='network', type='nn.Sequential', help='hierarchical model', req=true},
          {arg='dumpfile', type='string', help='path for dumping the screenshot of the display'},
-         {arg='legend', type='string', help='title of the window', default='Network'},
+         {arg='legend', type='string', help='title of the window', 
+	  default='Network'},
          {arg='input', type='torch.Tensor', help='input for the model'},
          {arg='dispInput', type='boolean', help='flag to display the input if given'},
          {arg='dispFilters', type='boolean', help='flag to display the weights of the model', default=true},
          {arg='globalzoom', type='int', help='global zoom of the display', default=1},
          {arg='filterzoom', type='boolean', help='zoom for the weights', default=3},
-         {arg='painter', type='boolean', help='qt painter for display'}
+         {arg='painter', type='boolean', help='qt painter for display'},
+	 {arg='width', type='int', help='width of window in pixels', 
+	  default=800},
+	 {arg='height', type='int', help='height of window in pixels', 
+	  default=600} 
       )
-      local height,width
       if painter == nil and dumpfile ~= nil then
          print('# Dumping network internals to file')
-         painter = qtwidget.newimage(4000,3000)
-         height = 3000
-         width = 4000
+         painter = qtwidget.newimage(width,height)
       elseif painter == nil then
          print('# Displaying network internals')
-         painter = qtwidget.newwindow(1600,1200,legend)
-         height = 800
-         width = 1600
+         painter = qtwidget.newwindow(width,height,legend)         
       end
       
       -- font
@@ -2022,6 +2294,7 @@ do
       end
       
       -- display network
+      local fontshift = 0
       for i=1,#network.modules do
          local module = network.modules[i]
          local name = module.__typename
@@ -2029,22 +2302,39 @@ do
          -- display filters
          if name == 'nn.SpatialConvolution' then
             if dispFilters == true then
-               current_x = current_x + module.weight:size(1)*filterzoom
+               current_x = current_x + (fontshift+module.weight:size(1))*filterzoom
                current_y = fontHeight*2
-               painter:moveto(current_x*globalzoom + 3, current_y*globalzoom-1)
-               painter:show('Weights at Layer '..i' :')
+               painter:moveto(current_x*globalzoom + 3, current_y*globalzoom)
+               local titlew = 'Weights at Layer '..i..' :'
+               painter:show(titlew)
+               local lenfont = string.len(titlew)
                current_y = current_y+fontHeight
                painter:moveto(current_x*globalzoom + 3, current_y*globalzoom-1)
                painter:show(name)
+               lenfont = math.max(lenfont,string.len(name))
+               if module.weight:size(3)*module.weight:size(1)*filterzoom < (lenfont + 2) then
+                  fontshift = lenfont + 2
+               else
+                  fontshift = 0
+               end
                for i = 1,module.weight:size(4) do
-                  image.qtdisplay{painter=painter, tensor=module.weight:select(4,i,1),
-                                  globalzoom=globalzoom,
-                                  zoom=filterzoom,
-                                  offset_x=current_x, offset_y=current_y}
-                  current_y = current_y + module.weight:size(2)*filterzoom + 2
-                  if current_y > height then
-                     current_y = fontHeight*3
+                  if module.weight:size(3) < 2 then
+                     image.qtdisplay{painter=painter, tensor=module.weight:select(4,i,1),
+                                     globalzoom=globalzoom,
+                                     zoom=filterzoom,
+                                     offset_x=current_x, offset_y=current_y}
+                     current_y = current_y + module.weight:size(2)*filterzoom + 2
+                  else
+                     for j = 1,module.weight:size(3) do
+                        image.qtdisplay{painter=painter, 
+                                        tensor=module.weight:select(4,i,1):select(3,j,1),
+                                        globalzoom=globalzoom,
+                                        zoom=filterzoom,
+                                        offset_x=current_x, offset_y=current_y}
+                        current_y = current_y + module.weight:size(2)*filterzoom + 2
+                     end
                      current_x = current_x + module.weight:size(1)*filterzoom + 2
+                     current_y = fontHeight*3
                   end
                end
                current_x = current_x + module.weight:size(1)*filterzoom*2
@@ -2094,5 +2384,6 @@ do
       if dumpfile ~= nil then
          painter:image():save(dumpfile)
       end
+      return painter
    end
 end -- global do for local var purpose

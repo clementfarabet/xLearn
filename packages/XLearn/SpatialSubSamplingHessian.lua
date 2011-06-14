@@ -35,8 +35,8 @@ function SpatialSubSamplingHessian:oneLearningRates()
 end
 
 function SpatialSubSamplingHessian:boundLearningRates(mu)
-   self.weightLearningRate:add(mu)
-   self.biasLearningRate:add(mu)
+   self.weightLearningRate:abs():add(mu)
+   self.biasLearningRate:abs():add(mu)
 end
 
 function SpatialSubSamplingHessian:updateLearningRates(factor)

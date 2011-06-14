@@ -1,9 +1,18 @@
-XLearn, Extension Packages Reference Manual [nn,image,toolBox]
+XLearn Package Reference Manual (+ extensions to nn)
 
-XLearn provides extension to Torch 5 original packages.
-In particular, it provides new nn.Modules, new learning algorithms, lots of tools that extends the image package, and a toolBox that provides, well, all sort of tools.
+XLearn provides lots of extensions to Torch 5 original packages.
 
----+ nn.Modules
+In particular, it provides new modules (nn), new learning algorithms, 
+criterions (nn), and dataset classes.
+
+---+ nn+ [extension]
+
+The package =nn= provides an easy way to build and train simple or complex
+neural networks. =xLearn= extends this package by providing new modules and criterions.
+
+---++ Modules
+
+Several new modules are defined.
 
 ---+++ =LocalNorm=
 
@@ -630,35 +639,32 @@ m:add(nn.ContrastNormalization(10,ker)
 
 
 
----+ nn.Deciders
+---++ Criterions
 
----+++ =Decider=
-
-<verbatim>
-module = nn.Decider()
-</verbatim>
-
-An abstract class to represent deciders, or more generally modules that process outputs of nn.Modules.
-
-
-
----+++ =ParzenDecider=
+---+++ =EdgeCriterion=
 
 <verbatim>
-module = nn.ParzenDecider()
+module = nn.EdgeCriterion()
 </verbatim>
 
-Implements Parzen windows to divide a space. 
+A criterion to learn edges.
 
 
 
+---+++ =MalisCriterion=
 
----+ Tools
+<verbatim>
+module = nn.MalisCriterion()
+</verbatim>
 
----+++ =toolBox=
+A criterion to learn edges, as defined by the Rand index.
 
----+++ =imageBox=
 
----+++ =dataSet=
 
----+++ =camera=
+---+ xLearn Classes
+
+
+
+---+ xLearn Functions
+
+

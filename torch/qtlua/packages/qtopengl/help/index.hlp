@@ -1,0 +1,50 @@
+QtOpenGL Bindings
+
+The package =qtopengl= 
+contains bindings for classes defined by the Qt module
+[[http://doc.trolltech.com/4.4/qtopengl.html][=QtOpenGL=]].
+
+Besides the capabilites reported below,
+all qt variants inherit a set 
+of [[../qt/index.hlp#QVariants][default methods]],
+and all qt object classes inherit the capabilities from their 
+superclasses and automatically expose 
+[[../qt/index.hlp#QObjects][properties, slots and signals]].
+
+
+---+++ qt.QGLWidget
+#qglwidget
+
+Class 
+[[http://doc.trolltech.com/4.4/qsvgwidget.html][=QGLWidget=]]
+provides a widget that is used to display OpenGL contents.
+
+---++++ qt.QGLWidget([parent])
+
+Expression =qt.QGLWidget(parent)= 
+returns a new instance of the Qt class =QGLWidget=.
+
+This instance is not very useful because subclasses
+of =QGLWidget= are expected to override the C++ methods 
+=initializeGL()=, =resizeGL()=, and =paintGL()=.
+Nothing has been done yet to write 
+these overrides using Lua. 
+In fact this is only possible when the Lua interpreter
+runs in the main thread.
+
+---+++ qt.HelloGL
+#hellogl
+
+Class 
+[[http://doc.trolltech.com/4.4/qsvgwidget.html][=QGLWidget=]]
+provides a widget that is used to display a demo of OpenGL contents.
+
+---++++ qt.HelloGL([parent])
+
+Expression =qt.HelloGL(parent)= 
+returns a new instance of the Qt class =HelloGL=.
+
+It is a primitive extension which shows how to override the C++
+methods =initializeGL()=, =resizeGL()=, and =paintGL()=.  The
+overrides are written in C++ not in Lua.  The example is contained in
+the files hellogl.h and hellogl.cpp

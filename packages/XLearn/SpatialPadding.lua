@@ -68,6 +68,7 @@ function SpatialPadding:backward(input, gradOutput)
    return self.gradInput
 end
 
+
 function SpatialPadding:write(file)
    parent.write(self, file)
    file:writeInt(self.pad_l)

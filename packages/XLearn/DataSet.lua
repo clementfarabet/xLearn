@@ -22,14 +22,15 @@ do
 
    function lDataSet:load(...)
       -- parse args      
-      local args, dataSetFolder, nbSamplesRequired, cacheFile, chanels
+      local args, dataSetFolder, nbSamplesRequired, cacheFile, chanels, sampleSize
          = toolBox.unpack(
          {...},
          'DataSet.load', nil,
          {arg='dataSetFolder', type='string', help='path to dataset', req=true},
          {arg='nbSamplesRequired', type='number', help='number of patches to load', default='all'},
          {arg='cacheFile', type='string', help='path to file to cache files'},
-         {arg='chanels', type='number', help='nb of channels', default=1}
+         {arg='chanels', type='number', help='nb of channels', default=1},
+         {arg='sampleSize', type='table', help='resize all sample: {w,h}'}
       )
       self.cacheFileName = cacheFile or self.cacheFileName
 
@@ -55,7 +56,9 @@ do
 
       -- If dataset couldn't be loaded from cache, load it
       if (datasetLoadedFromFile == false) then
-         self:append{dataSetFolder=dataSetFolder, chanels=chanels, nbSamplesRequired=nbSamplesRequired}
+         self:append{dataSetFolder=dataSetFolder, chanels=chanels, 
+                     nbSamplesRequired=nbSamplesRequired,
+                     sampleSize=sampleSize}
          -- if cache name given, create it now
          if (fileName ~= nil) then
             print('# Dumping dataset to cache file ' .. fileName .. ' for fast retrieval')
@@ -103,7 +106,8 @@ do
 
    function lDataSet:append(...)
       -- parse args
-      local args, dataSetFolder, chanels, nbSamplesRequired, useLabelPiped, useDirAsLabel, nbLabels    
+      local args, dataSetFolder, chanels, nbSamplesRequired, useLabelPiped, 
+      useDirAsLabel, nbLabels, sampleSize
          = toolBox.unpack(
          {...},
          'DataSet:append', 'append a folder to the dataset object',
@@ -112,7 +116,8 @@ do
          {arg='nbSamplesRequired', type='number', help='max number of samples to load'},
          {arg='useLabelPiped', type='boolean', help='flag to use the filename as output value',default=false},
          {arg='useDirAsLabel', type='boolean', help='flag to use the directory as label',default=false},
-         {arg='nbLabels', type='number', help='how many classes (goes with useDirAsLabel)', default=1}
+         {arg='nbLabels', type='number', help='how many classes (goes with useDirAsLabel)', default=1},
+         {arg='sampleSize', type='table', help='resize all sample: {w,h}'}
       )
       -- parse args
       local files = paths.dir(dataSetFolder)
@@ -127,8 +132,7 @@ do
       local loaded = 0
 
       for k,file in pairs(files) do
-         local input
-         local rawOutput
+         local input, inputs, rawOutput
 
          -- disp progress
          toolBox.dispProgress(k, toLoad)
@@ -148,13 +152,31 @@ do
 
             -- parse the file name and set the ouput from it
             rawOutput = toolBox.split(string.gsub(file, ".p[pgn]m", ""),'|')
+
+         elseif (string.find(file,'.jpg')) then
+            -- load the JPG into a new Tensor
+            pathToPpm = paths.concat(dataSetFolder, file)
+            input = image.load(pathToPpm,chanels)
+
+            -- parse the file name and set the ouput from it
+            rawOutput = toolBox.split(string.gsub(file, ".jpg", ""),'|')
          end
          
          -- if image loaded then add into the set
          if (input and rawOutput) then
             table.remove(rawOutput,1) --remove file ID
+
             -- put input in 3D tensor
-            input:resize(input:size()[1], input:size()[2], chanels)
+            input:resize(input:size(1), input:size(2), chanels)
+
+            -- rescale ?
+            if sampleSize then
+               inputs = torch.Tensor(sampleSize[1], sampleSize[2], chanels)
+               image.scale(input, inputs, 'bilinear')
+            else
+               inputs = input
+            end
+
             -- and generate output
             local output = torch.Tensor(table.getn(rawOutput), 1)
             for i,v in ipairs(rawOutput) do
@@ -163,7 +185,7 @@ do
 
             -- add input/output in the set
             self.nbSamples = self.nbSamples + 1
-            self[self.nbSamples] = {input, output}
+            self[self.nbSamples] = {inputs, output}
 
             loaded = loaded + 1
             if (loaded == toLoad) then
@@ -171,6 +193,8 @@ do
             end
          end
 
+         -- some cleanup, for memory
+         collectgarbage()
       end
    end
 
@@ -241,7 +265,7 @@ do
    function lDataSet:display(args) -- opt args : scale, nbSamples
       -- arg list:
       local min, max, nbSamples, scale, w
-      local title = 'dataset'
+      local title = 'DataSet'
       local resX = 800
       local resY = 600
       -- parse args:
@@ -281,19 +305,9 @@ do
          step_x = step_x + self[i][1]:size()[1]*scale
       end
    end
-   
-   function lDataSet:__tostring__()
-      str = 'DataSet\n'
-      str = str..'nb elements : '..self.nbSamples
-      if self[1] then 
-         local inputSize = self[1][1]:size()
-         local outputSize = self[1][2]:size()
-         str = str..'\ninput '..inputSize[1]..'x'..inputSize[2]
-         if (self[1][2]:nDimension() > 1) then
-            str = str..'\noutput '..outputSize[1]..'x'..outputSize[2]
-         end
-      end
-      return str
+
+   function lDataSet:__show()
+      self:display{nbSamples=100}
    end
 
    function lDataSet:useCacheFile(fileName)

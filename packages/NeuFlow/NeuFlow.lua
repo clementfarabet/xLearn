@@ -50,8 +50,12 @@ do
       -- ethernet socket (auto found for now)
       if self.use_ethernet then
          print '# loading ethernet driver'
-         require 'libetherflow'
-         libetherflow.open_socket()
+         local l = xrequire 'etherflow'
+         if not l then 
+            self.use_ethernet = false
+         else
+            libetherflow.open_socket()
+         end
       end
 
       -- serial dev
@@ -422,7 +426,8 @@ function NeuFlow:copyToHost_ack(source, dest)
    -- high-level GOTO functions
    --
    function NeuFlow:beginLoop(tag)
-      self.loopTags.tag = self.core:currentAddress()
+      self.loopTags.tag = self.core:makeGotoTag()
+      self.loopTags.tag.offset = 1
       self.core:startProcess()
       self.core:endProcess()
    end
@@ -430,7 +435,7 @@ function NeuFlow:copyToHost_ack(source, dest)
    function NeuFlow:endLoop(tag)
       self.core:startProcess()
       self.core:defaults()
-      self.core:gotoGlobal(self.loopTags.tag)
+      self.core:gotoTag(self.loopTags.tag)
       self.core:endProcess()
    end
 
@@ -485,8 +490,19 @@ function NeuFlow:copyToHost_ack(source, dest)
       print('# exporting compiled code [hex]')
       self:writeBytecode{{format='hex', width=oFlower.bus_, length=oFlower.cache_size_b},
                          {format='hex', width=streamer.mem_bus_}}
-      os.execute('mv '..self.prog_name..'.hex64 '..cache_hex)
-      os.execute('mv '..self.prog_name..'.hex256 '..mem_hex)
+
+      -- platform-dependent memories:
+      if self.core.platform == 'ibm_asic' then
+         os.execute('mv '..self.prog_name..'.hex64 '..cache_hex)
+         for subidx = 0,7 do
+            os.execute('cut -c'..(subidx*8+1)..'-'..(subidx*8+8)..' '
+                 ..self.prog_name..'.hex256 > '..mem_hex..'.'..(subidx+1))
+         end
+         os.execute('rm '..self.prog_name..'.hex256 ')
+      else
+         os.execute('mv '..self.prog_name..'.hex64 '..cache_hex)
+         os.execute('mv '..self.prog_name..'.hex256 '..mem_hex)
+      end
 
       local c = toolBox.COLORS
       print(c._cyan)

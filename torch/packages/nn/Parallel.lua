@@ -76,6 +76,18 @@ function Parallel:updateParameters(learningRate)
    end
 end
 
+function Parallel:decayParameters(decay)
+   for i=1,#self.modules do
+      self.modules[i]:decayParameters(decay)
+   end
+end
+
+function Parallel:empty()
+  for i=1,#self.modules do
+     self.modules[i]:empty()
+  end
+end
+
 function Parallel:write(file)
    parent.write(self, file)
    file:writeObject(self.modules)

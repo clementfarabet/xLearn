@@ -1,11 +1,11 @@
 # add find script for libusb and libfreenect
-SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/contrib/Kinect/scripts
+SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/contrib/kinect/scripts
                       ${CMAKE_MODULE_PATH})
 find_package(Freenect REQUIRED)
 
 IF (FREENECT_FOUND)
    SET(src libfreenect_sync.c kinect.c) 
-   SET(luasrc init.lua) 
+   SET(luasrc init.lua Kinect.lua) 
 
    ADD_TORCH_PACKAGE(kinect "${src}" "${luasrc}")
 
